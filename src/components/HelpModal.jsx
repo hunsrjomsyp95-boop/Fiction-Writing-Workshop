@@ -1,0 +1,398 @@
+﻿import { useState } from 'react'
+import {
+  FileText,
+  Bot,
+  Search,
+  Scan,
+  PenTool,
+  Package,
+  Link,
+  BookOpen,
+  Download,
+  Focus,
+  Eye,
+  ListTree,
+  Target,
+} from 'lucide-react'
+
+const CHANGES = [
+  {
+    ver: '1.0.0',
+    date: '2026-08-11',
+    items: [
+      '正式版发布：经过多个版本迭代，小说创作工坊正式发布 1.0 版本',
+      'AI 服务商内置：20+ 个服务商、80+ 个模型（含 MiMo/Plan、DeepSeek V4、Qwen3、GPT-4.1、Claude、Gemini 等）',
+      'Ollama 本地模型集成：自动检测安装、一键启动服务、一键下载模型、调用时自动启动',
+      '赞赏页面：支持微信/支付宝打赏',
+      '数据库完整性检查与自动修复',
+      '备份轮转、自动更新、全局错误处理、无障碍优化',
+      'Lucide SVG 图标系统、CodeMirror 按需加载、ESLint + Prettier',
+      '修复多项 bug 与代码质量问题',
+    ],
+  },
+  {
+    ver: '0.9.0',
+    date: '2026-08-10',
+    items: [
+      '双向链接：编辑器支持 [[名称]] 语法高亮和点击跳转，自动查找人物/章节/设定',
+      '增强阅读模式：全屏舒适排版，字体调节、首行缩进、上下章导航、进度显示',
+      'AI 续写上下文：自动携带前几章摘要，勾选「附加项目设定」时附带上一章摘要',
+      '角色出场追踪：人物面板新增「出场章节」区域，自动统计角色出场次数',
+      '素材暂存区：右侧面板「暂存」标签页，快速记录灵感，支持插入正文',
+      'AI 严格编辑模式：挑剔的资深编辑审阅文字，逐条列出问题并评分',
+      'AI 夸夸骨灰粉模式：狂热粉丝赞美文字，找闪光点给"封神指数"',
+      '分屏编辑：章节列表点击 ⧉ 按钮可同时打开两个章节左右对比编辑',
+      '版本标签：给重要版本打标签（如"投稿版""终稿"），对比选择器中显示',
+      '大纲拖拽排序：大纲节点支持拖拽调整顺序，同级交换、跨级移动父节点',
+      'AI 自动摘要：摘要框旁「AI 摘要」按钮，一键用 AI 生成章节摘要',
+      'AI 续写多候选：续写按钮右键触发 3 候选模式，并行生成 3 个版本供选择',
+      'AI 角色一致性检查：新增思考动作，检测角色性格/说话/行为是否前后一致',
+      '代码质量优化：ESLint 0 error，清理未使用变量，修复 React Hook 依赖',
+    ],
+  },
+  {
+    ver: '0.8.0',
+    date: '2026-08-09',
+    items: [
+      'AI 服务商内置：小米 MiMo、SiliconFlow、DeepSeek、OpenAI、通义千问、月之暗面、Ollama 本地共 8 个',
+      'AI 配置简化：选服务商 → 选模型 → 填 Key，三步完成，无需手动填写 URL',
+      'AI 错误提示增强：连接失败显示具体原因（Key 无效、余额不足、网络不通、超时等）',
+      '内置 20 个服务商、80+ 个模型（含 MiMo V2.5 Pro/Plan、DeepSeek V4、Qwen3 等）',
+    ],
+  },
+  {
+    ver: '0.7.0',
+    date: '2026-08-09',
+    items: [
+      '数据库修复机制：启动时自动检测完整性，损坏时自动备份并重建',
+      '备份轮转：每个项目最多保留 30 个备份，自动清理旧备份',
+      '自动更新：集成 electron-updater，启动后自动检查新版本',
+      '全局错误处理：添加 window.onerror 捕获未处理异常',
+      '无障碍优化：关键元素添加 role、aria-label、tabIndex 等属性',
+      '性能优化：React.memo 防止列表无效重渲染，useCallback/useMemo 缓存',
+      'CodeMirror 按需加载：编辑器改为动态 import，首屏减少 523KB',
+      'DB 预编译语句缓存：高频 SQL 复用 prepared statement',
+      'ESLint + Prettier：统一代码风格，新增 lint/format 命令',
+      '修复：导入数据库未执行迁移、FTS5 索引不可靠、备份轮转崩溃等多项 bug',
+    ],
+  },
+  {
+    ver: '0.6.0',
+    date: '2026-08-09',
+    items: [
+      'SVG 图标系统：引入 Lucide 图标库，替换所有 Emoji 和 Unicode 符号为统一风格的 SVG 矢量图标',
+      'React Error Boundary：添加错误边界组件，防止组件渲染崩溃导致白屏',
+      'HTML 清理工具：集成 DOMPurify，对 Markdown 渲染输出进行 XSS 安全过滤',
+      'SQLite FTS5 全文搜索：章节内容搜索改用 FTS5 索引，提升大数据量下的搜索性能',
+      '代码分割：Workspace 视图组件改为 React.lazy 懒加载，首屏加载体积减少 78%',
+      '生产构建优化：开启 minify、关闭 sourcemap，JS 体积减少 42%',
+      '修复了 100 个漏洞',
+    ],
+  },
+  {
+    ver: '0.5.0',
+    date: '2026-08-07',
+    items: [
+      'AI 提取代理：独立面板粘贴任意文本，AI 自动提取人物 / 世界观/ 物品道具 / 年表事件 / 伏笔五大类实体，逐条确认后批量创建到数据库',
+      '工作区侧栏新增「 提取」标签页，独立于 AI 对话面板',
+    ],
+  },
+  {
+    ver: '0.4.0',
+    date: '2026-08-07',
+    items: [
+      '版本对比增强：并排diff 视图（逐行对照双栏排版） 统一/并排视图切换',
+      '写作统计图表：统计面板新增7天/30天/90天周期切换按钮',
+      '导出 PDF：支持将项目导出为PDF 文件',
+      'AI 续写：光标感知续写（仅发送光标前文，支持插入到光标位置）',
+      '自动敏感词检测：敏感词字典管理+ 自动扫描橙色高亮',
+    ],
+  },
+  {
+    ver: '0.3.1',
+    date: '2026-08-07',
+    items: [
+      '删除确认弹窗：人物关系自定义主题错字词典条目等破坏性操作增加二次确认',
+      '自动保存状态指示：编辑器底栏实时显示「✓ 已保存/ 仅保存在..」',
+      '窗口状态持久化：自动保存恢复窗口位置与大小',
+      '系统深色模式自适应：新增「跟随系统」开关，自动在暗色护眼主题间切换',
+    ],
+  },
+  {
+    ver: '0.3.0',
+    date: '2026-08-06',
+    items: [
+      '主题粒子特效背景（Canvas 动画，各主题专属粒子效果：极光岩浆/鱼群/金光/飘叶/护眼柔和渐变）',
+      '自定义主题支持（模板导入/导出、颜色自定义创建器）',
+      '专注模式（全屏无干扰写作 + 正计时/ 番茄钟计时器）',
+      '写作目标（每日字数目标进度条 + 连续写作天数统计）',
+      'Markdown 实时预览（分栏模式，编辑同时预览渲染效果）',
+      '大纲增强（节点折叠展开 + 按类型着色标记）',
+      '每日目标设置（在统计页面可设定每日写作字数目标）',
+      '资料库增强（排序控制、Markdown 预览切换、文件导入导出）',
+      '导出格式选择（项目导出可选Markdown 或纯文本 TXT）',
+      '素材导出支持 TXT 格式',
+      '导入支持 .txt 章节文件',
+      '减缓粒子特效动画速度（约 3 倍），减少视觉干扰',
+    ],
+  },
+  {
+    ver: '0.2.0',
+    date: '2025-08-06',
+    items: [
+      '联网搜索功能（AI 面板可搜索互联网资料）',
+      '自动纠错（一键修正错别字）',
+      '一键排版（格式化标点、空格、段落间距）',
+      '纯字数统计（不含符号）',
+      '帮助中心（使用说明与更新日志）',
+    ],
+  },
+  {
+    ver: '0.1.0',
+    date: '2025-07',
+    items: [
+      '章节编辑器（CodeMirror 6）',
+      'AI 写作辅助（润色、建议、剧情、人物、起名、文笔、情感、翻译）',
+      '自动保存与版本快照',
+      '本地错字检测',
+      '伏笔追踪系统',
+      '年表/时间线管理',
+      '资料库（素材分类管理）',
+      '写作统计（今日本次写作字数）',
+      '自定义主题与文字颜色',
+      '快捷键自定义',
+      '本地账号登录',
+      '全文搜索与替换',
+      '导入/导出/备份',
+    ],
+  },
+]
+
+const HELP_SECTIONS = [
+  {
+    icon: FileText,
+    title: '章节写作',
+    items: [
+      '章节列表：左侧显示所有章节，可拖拽排序、右键重命名/删除',
+      '工具栏：查找、阅读模式（Markdown 预览）、快照、保存、纠错、排版',
+      '章节元信息：状态（草稿/待修改已完成）、场景、摘要、笔记',
+      '字数统计：标题下方和编辑器底栏显示不含符号的纯字数',
+    ],
+  },
+  {
+    icon: Bot,
+    title: 'AI 思考',
+    items: [
+      '选择思考动作（建议/剧情/人物/起名/文笔/情感/翻译），AI 根据当前章节内容给出反馈',
+      '「设置 → AI 设置」中选择服务商和模型，填写 API Key 即可使用',
+      '内置小米 MiMo、SiliconFlow、DeepSeek、OpenAI、通义千问、月之暗面、Ollama 本地',
+      '高级用户可选「自定义」手动填写 API 地址和模型名',
+    ],
+  },
+  {
+    icon: Search,
+    title: '联网搜索',
+    items: [
+      '在 AI 面板底部输入搜索词，将结果插入写作区',
+      '需先在 设置 tAI 设置 中配置Google Custom Search API Key 和搜索引擎ID',
+    ],
+  },
+  {
+    icon: Scan,
+    title: 'AI 提取',
+    items: [
+      '在侧栏「 提取」标签页中粘贴任意小说文本段落',
+      'AI 自动提取人物 / 世界观/ 物品道具 / 年表事件 / 伏笔五大类实体',
+      '逐条审核编辑，勾选确认后批量创建到对应模块',
+      '需先在 设置 「AI 设置 中配置API 信息和模型',
+    ],
+  },
+  {
+    icon: PenTool,
+    title: '纠错与排版',
+    items: [
+      '纠错：自动检测并修正错别字，基于本地词典和常见错误模式',
+      '排版：统一换行符、清除行尾空格、合并空行、中英文间距、全角半角转换',
+      '工具按钮位于章节编辑器的工具栏中',
+    ],
+  },
+  {
+    icon: Package,
+    title: '版本管理',
+    items: [
+      '快照：手动保存当前版本，每次保存生成一个历史版本',
+      '自动保存：编辑时自动生成版本快照',
+      '在右侧版本面板中查看、回滚历史版本',
+    ],
+  },
+  {
+    icon: Link,
+    title: '伏笔与年表',
+    items: [
+      '伏笔：记录和管理小说中的伏笔，跟踪状态（未使用已揭晓已废弃）',
+      '年表：按故事时间线编排事件，支持排序和分组',
+    ],
+  },
+  {
+    icon: BookOpen,
+    title: '资料库',
+    items: ['素材分类：按类型（人物地点/物品/事件/其他）管理写作素材', '支持 AI 自动分类'],
+  },
+  {
+    icon: Download,
+    title: '导出与备份',
+    items: [
+      '导出：将小说导出为JSON 格式',
+      '导入：从 JSON 文件导入小说',
+      '备份：手动备份或开启自动备份',
+      '所有数据仅保存在本机SQLite 数据库中',
+    ],
+  },
+  {
+    icon: Focus,
+    title: '专注写作',
+    items: [
+      '点击编辑器工具栏「专注」按钮进入全屏无干扰模式',
+      '支持正计时和番茄钟（25分钟工作 + 5分钟休息）',
+      '可开启实时Markdown 预览',
+      '完成后自动保存并记录专注时长',
+    ],
+  },
+  {
+    icon: Eye,
+    title: 'Markdown 实时预览',
+    items: [
+      '点击「预览」按钮开启分栏模式，左侧编辑右侧预览',
+      '支持 Markdown 全部语法（标题、列表、表格、代码块等）',
+      '分割线可拖拽调整左右比例',
+    ],
+  },
+  {
+    icon: ListTree,
+    title: '大纲增强',
+    items: [
+      '节点类型用不同颜色标记（卷/章/剧情线/节点/伏笔）',
+      '父节点可折叠/展开子节点，方便浏览大纲结构',
+      '支持拖拽排序：拖拽节点调整顺序，同级交换、跨级移动父节点',
+    ],
+  },
+  {
+    icon: Target,
+    title: '写作目标',
+    items: ['在统计页面设定每日写作字数目标', '编辑器底栏显示今日进度条和目标完成率', '连续写作天数统计（色标记）'],
+  },
+  {
+    icon: Link,
+    title: '双向链接',
+    items: [
+      '在编辑器中输入 [[人物名]]、[[章节名]]、[[设定名]] 创建内部链接',
+      '链接自动高亮为蓝色下划线，点击即可跳转到对应人物/章节/设定',
+      '阅读模式下链接显示为虚线下划线标记',
+    ],
+  },
+  {
+    icon: Eye,
+    title: '增强阅读模式',
+    items: [
+      '点击工具栏「阅读」进入全屏舒适排版模式',
+      '支持 A-/A+ 调节字体大小，首行自动缩进',
+      '底部显示上一章/下一章导航按钮和章节进度',
+    ],
+  },
+  {
+    icon: PenTool,
+    title: 'AI 特色模式',
+    items: [
+      '🔍 严格编辑：AI 以挑剔的资深编辑身份审阅文字，逐条列出问题并给出 1-10 分评分',
+      '🌟 夸夸骨灰粉：AI 以狂热粉丝身份赞美文字，找出 5+ 个闪光点，给出"封神指数"',
+      '🛡️ 角色一致性：AI 检测角色在不同章节的性格/说话/行为是否前后一致',
+      '续写时自动携带前几章摘要作为上下文，保持剧情连贯',
+      '续写按钮右键触发 3 候选模式，并行生成 3 个版本供选择',
+      '「AI 摘要」按钮一键用 AI 生成章节摘要，省去手写',
+      '勾选「附加项目设定」后 AI 会结合世界观/人物/大纲/年表/伏笔状态',
+    ],
+  },
+  {
+    icon: FileText,
+    title: '分屏与版本',
+    items: [
+      '分屏编辑：章节列表点击 ⧉ 按钮，可同时打开两个章节左右对比编辑',
+      '版本标签：版本列表中点击「打标签」给重要版本命名（如"投稿版""终稿"）',
+      '对比选择器中标签以 [标签名] 形式显示，方便识别',
+    ],
+  },
+]
+
+function HelpCard({ icon: Icon, title, items }) {
+  return (
+    <div style={{ background: 'var(--bg-2)', borderRadius: 8, padding: 12, border: '1px solid var(--border)' }}>
+      <div className='row' style={{ gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: 18 }}>
+          <Icon size={18} />
+        </span>
+        <b style={{ fontSize: 14 }}>{title}</b>
+      </div>
+      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.9, color: 'var(--text-1)' }}>
+        {items.map((item, i) => (
+          <li key={i}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+export default function HelpModal({ onClose }) {
+  const [tab, setTab] = useState('help')
+
+  return (
+    <div className='modal-mask' onClick={onClose}>
+      <div className='modal' style={{ width: 680 }} onClick={(e) => e.stopPropagation()}>
+        <div className='modal-head'>
+          帮助
+          <div className='tabs' style={{ background: 'none', border: 'none', padding: 0, marginLeft: 12 }}>
+            <div className={`tab ${tab === 'help' ? 'active' : ''}`} onClick={() => setTab('help')}>
+              使用说明
+            </div>
+            <div className={`tab ${tab === 'changelog' ? 'active' : ''}`} onClick={() => setTab('changelog')}>
+              更新日志
+            </div>
+          </div>
+          <div className='spacer' />
+          <button className='ghost small' onClick={onClose}>
+            关闭
+          </button>
+        </div>
+        <div className='modal-body' style={{ maxHeight: '70vh' }}>
+          {tab === 'help' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {HELP_SECTIONS.map((s) => (
+                <HelpCard key={s.title} {...s} />
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {CHANGES.map((v) => (
+                <div
+                  key={v.ver}
+                  style={{ background: 'var(--bg-2)', borderRadius: 8, padding: 12, border: '1px solid var(--border)' }}
+                >
+                  <div className='row' style={{ gap: 8, marginBottom: 6 }}>
+                    <span className='badge accent' style={{ fontSize: 13 }}>
+                      v{v.ver}
+                    </span>
+                    <span className='hint'>{v.date}</span>
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.9 }}>
+                    {v.items.map((item, i) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

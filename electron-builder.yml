@@ -1,0 +1,43 @@
+appId: com.novelstudio.writer
+productName: 小说创作工坊
+copyright: Copyright © 2026
+
+publish:
+  provider: github
+  owner: hunsrjomsyp95-boop
+  repo: Fiction-Writing-Workshop
+  releaseType: release
+
+directories:
+  output: release2
+
+files:
+  - dist/**
+  - electron/**
+  - package.json
+
+asar: true
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+
+npmRebuild: false
+buildDependenciesFromSource: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: 小说创作工坊
+
+electronLanguages:
+  - zh-CN
+  - en-US
