@@ -207,7 +207,7 @@ export default function TypoCheckPanel({ novel: _novel, chapter: _chapter, conte
       )}
 
       {dictOpen && (
-        <div className='modal-mask' onClick={() => setDictOpen(false)}>
+        <div className='modal-mask'>
           <div className='modal' style={{ width: 560 }} onClick={(e) => e.stopPropagation()}>
             <div className='modal-head'>
               自定义错字词典 <div className='spacer' />

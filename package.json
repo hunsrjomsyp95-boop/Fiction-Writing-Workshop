@@ -1,6 +1,6 @@
 {
   "name": "novel-studio",
-  "version": "1.0.0",
+  "version": "1.2.6",
   "description": "PC端小说写作工具：章节管理、错字更正、版本对比、大纲人物世界观、资料库、AI辅助",
   "main": "electron/main.js",
   "author": "novel-studio",
@@ -18,6 +18,8 @@
     "test:e2e-extra": "electron test/e2e-extra.js",
     "test:all": "electron test/full-test.js && electron test/e2e-full.js && electron test/e2e-extra.js",
     "dist": "npm run build && electron-builder --win",
+    "dist:x64": "npm run build && electron-builder --win --x64 -c.directories.output=release-x64",
+    "dist:ia32": "npm run build && electron-builder --win --ia32 -c electron-builder-ia32.yml",
     "lint": "eslint src/ electron/ --ext .js,.jsx",
     "lint:fix": "eslint src/ electron/ --ext .js,.jsx --fix",
     "format": "prettier --write \"src/**/*.{js,jsx,json,css}\" \"electron/**/*.js\"",
@@ -25,17 +27,31 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^8.1.1",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/dialog": "^8.0.1",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/keyboard": "^8.0.5",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.3",
+    "@capacitor/toast": "^8.0.1",
     "@codemirror/search": "^6.7.1",
     "better-sqlite3": "^12.2.0",
     "diff": "^7.0.0",
     "docx": "^9.7.1",
     "dompurify": "^3.4.13",
     "electron-updater": "^6.8.9",
+    "jeep-sqlite": "^2.8.0",
     "lucide-react": "^1.30.0",
     "mammoth": "^1.12.0",
     "marked": "^18.0.7",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "sql.js": "^1.14.2"
   },
   "devDependencies": {
     "@codemirror/commands": "^6.8.0",
@@ -56,6 +72,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "^3.9.6",
     "vite": "^6.2.0",
+    "vite-plugin-static-copy": "^4.1.1",
     "vitest": "^4.1.10",
     "wait-on": "^8.0.3"
   },

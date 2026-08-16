@@ -1,9 +1,23 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react'
+﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useToast } from '../ToastContext.jsx'
 import { useDialog } from '../Dialog.jsx'
 import RelationGraph from './RelationGraph.jsx'
+import { User, UserRound, Baby, PersonStanding, Dog, Skull, Crown } from 'lucide-react'
 
 const ROLES = ['主角', '重要配角', '配角', '反派', '龙套', '未定']
+
+const CHAR_ICONS = [
+  { id: '', label: '无', Icon: null },
+  { id: 'male', label: '男', Icon: User },
+  { id: 'female', label: '女', Icon: UserRound },
+  { id: 'child', label: '小孩', Icon: Baby },
+  { id: 'elder', label: '老人', Icon: PersonStanding },
+  { id: 'beast', label: '野兽', Icon: Dog },
+  { id: 'dead', label: '亡者', Icon: Skull },
+  { id: 'royal', label: '王族', Icon: Crown },
+]
+
+const ICON_MAP = { male: User, female: UserRound, child: Baby, elder: PersonStanding, beast: Dog, dead: Skull, royal: Crown }
 
 const FIELDS = [
   { key: 'name', label: '姓名' },
@@ -29,7 +43,23 @@ export default function CharactersView({ novel }) {
   const [roleFilter, setRoleFilter] = useState('')
   const [relations, setRelations] = useState([])
   const [relForm, setRelForm] = useState(null)
+  const [editRel, setEditRel] = useState(null)
   const [appearances, setAppearances] = useState([])
+  const [dragging, setDragging] = useState(null)
+  const [dragOver, setDragOver] = useState(null)
+
+  const currentRef = useRef(null)
+  const formRef = useRef(null)
+  currentRef.current = current
+  formRef.current = form
+
+  const updateFormField = useCallback((key, value) => {
+    setForm((prev) => {
+      const next = { ...prev, [key]: value }
+      formRef.current = next
+      return next
+    })
+  }, [])
 
   const load = useCallback(async () => {
     setList(await window.api.listCharacters(novel.id))
@@ -59,9 +89,15 @@ export default function CharactersView({ novel }) {
   }, [novel.id, prompt])
 
   const openEdit = useCallback((it) => {
+    const prev = formRef.current
+    if (prev && prev.id !== it.id && prev.name.trim()) {
+      window.api.updateCharacter(prev.id, prev).then(() => load())
+    }
+    currentRef.current = it
     setCurrent(it)
+    formRef.current = { ...it }
     setForm({ ...it })
-  }, [])
+  }, [load])
 
   const save = useCallback(async () => {
     if (!form?.name.trim()) {
@@ -103,6 +139,42 @@ export default function CharactersView({ novel }) {
     setCurrent(it)
     setForm({ ...it })
   }, [list])
+
+  const handleDragStart = useCallback((e, idx) => {
+    setDragging(idx)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', idx)
+  }, [])
+
+  const handleDragOver = useCallback((e, idx) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragging !== null && dragging !== idx) {
+      setDragOver(idx)
+    }
+  }, [dragging])
+
+  const handleDrop = useCallback(async (e, idx) => {
+    e.preventDefault()
+    if (dragging === null || dragging === idx) {
+      setDragging(null)
+      setDragOver(null)
+      return
+    }
+    const newList = [...filtered]
+    const [moved] = newList.splice(dragging, 1)
+    newList.splice(idx, 0, moved)
+    setDragging(null)
+    setDragOver(null)
+    await window.api.updateCharactersOrder(newList.map((c) => c.id))
+    setList(await window.api.listCharacters(novel.id))
+    toast('已调整顺序', 'success')
+  }, [dragging, filtered, novel.id, toast])
+
+  const handleDragEnd = useCallback(() => {
+    setDragging(null)
+    setDragOver(null)
+  }, [])
 
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
@@ -149,9 +221,27 @@ export default function CharactersView({ novel }) {
                   <div
                     style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}
                   >
-                    {filtered.map((c) => (
-                      <div key={c.id} className='card' style={{ cursor: 'pointer' }} onClick={() => openEdit(c)}>
+                    {filtered.map((c, idx) => (
+                      <div
+                        key={c.id}
+                        className='card'
+                        style={{
+                          cursor: 'grab',
+                          opacity: dragging === idx ? 0.5 : 1,
+                          borderTop: dragOver === idx ? '2px solid var(--primary)' : 'none',
+                          transition: 'opacity 0.2s, border-color 0.2s',
+                        }}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, idx)}
+                        onDragOver={(e) => handleDragOver(e, idx)}
+                        onDrop={(e) => handleDrop(e, idx)}
+                        onDragEnd={handleDragEnd}
+                        onClick={(e) => {
+                          if (!e.defaultPrevented) openEdit(c)
+                        }}
+                      >
                         <div className='row'>
+                          {(() => { const Ic = ICON_MAP[c.icon]; return Ic ? <Ic size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} /> : null })()}
                           <b className='grow'>{c.name}</b>
                           <span className='badge accent'>{c.role}</span>
                         </div>
@@ -193,11 +283,24 @@ export default function CharactersView({ novel }) {
                 <div
                   style={{ flex: 1, overflow: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}
                 >
+                  <div className='form-field'>
+                    <label>图标</label>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {CHAR_ICONS.map(ic => (
+                        <button key={ic.id} className='small' title={ic.label}
+                          onClick={() => updateFormField('icon', ic.id)}
+                          style={{ background: form.icon === ic.id ? 'var(--accent)' : undefined, color: form.icon === ic.id ? '#fff' : undefined, minWidth: 32, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {ic.Icon ? <ic.Icon size={16} /> : <span style={{ fontSize: 11 }}>无</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {FIELDS.map((f) => (
                     <div className='form-field' key={f.key}>
                       <label>{f.label}</label>
                       {f.select ? (
-                        <select value={form[f.key]} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}>
+                        <select value={form[f.key]} onChange={(e) => updateFormField(f.key, e.target.value)}>
                           {f.select.map((s) => (
                             <option key={s}>{s}</option>
                           ))}
@@ -206,12 +309,12 @@ export default function CharactersView({ novel }) {
                         <textarea
                           rows={f.key === 'background' ? 5 : 3}
                           value={form[f.key] || ''}
-                          onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                          onChange={(e) => updateFormField(f.key, e.target.value)}
                         />
                       ) : (
                         <input
                           value={form[f.key] || ''}
-                          onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                          onChange={(e) => updateFormField(f.key, e.target.value)}
                         />
                       )}
                     </div>
@@ -233,7 +336,7 @@ export default function CharactersView({ novel }) {
                         })
                       }
                     >
-                      物关系
+                      创建关系
                     </button>
                   </div>
 
@@ -254,6 +357,13 @@ export default function CharactersView({ novel }) {
                             </div>
                           )}
                         </div>
+                        <button
+                          className='ghost small'
+                          onClick={() => setEditRel({ ...r, char_b_id: r.char_a_id === form.id ? r.char_b_id : r.char_a_id })}
+                          title='编辑'
+                        >
+                          ✎
+                        </button>
                         <button
                           className='ghost small danger'
                           onClick={async () => {
@@ -297,7 +407,7 @@ export default function CharactersView({ novel }) {
             )}
 
             {relForm && (
-              <div className='modal-mask' onClick={() => setRelForm(null)}>
+              <div className='modal-mask'>
                 <div className='modal' style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
                   <div className='modal-head'>新增人物关系</div>
                   <div className='modal-body'>
@@ -385,6 +495,89 @@ export default function CharactersView({ novel }) {
                         setRelForm(null)
                         setRelations(await window.api.listRelations(novel.id, form.id))
                         toast('已添加关系', 'success')
+                      }}
+                    >
+                      保存
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {editRel && (
+              <div className='modal-mask'>
+                <div className='modal' style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
+                  <div className='modal-head'>编辑人物关系</div>
+                  <div className='modal-body'>
+                    <div className='form-grid'>
+                      <div className='form-field'>
+                        <label>关系类型</label>
+                        <input
+                          list='rel-types-edit'
+                          value={editRel.type}
+                          onChange={(e) => setEditRel({ ...editRel, type: e.target.value })}
+                          placeholder='恋人/宿敌/师徒/朋友...'
+                        />
+                        <datalist id='rel-types-edit'>
+                          {[
+                            '恋人',
+                            '夫妻',
+                            '宿敌',
+                            '师徒',
+                            '朋友',
+                            '家人',
+                            '上司下属',
+                            '同盟',
+                            '仇人',
+                            '青梅竹马',
+                            '竞争对手',
+                          ].map((t) => (
+                            <option key={t} value={t} />
+                          ))}
+                        </datalist>
+                      </div>
+                      <div className='form-field'>
+                        <label>方向</label>
+                        <select
+                          value={editRel.direction}
+                          onChange={(e) => setEditRel({ ...editRel, direction: e.target.value })}
+                        >
+                          <option>双向</option>
+                          <option>单向</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className='form-field'>
+                      <label>关系标签（简短）</label>
+                      <input
+                        value={editRel.label || ''}
+                        onChange={(e) => setEditRel({ ...editRel, label: e.target.value })}
+                        placeholder='如：宿命 / 恩怨/ 暗恋'
+                      />
+                    </div>
+                    <div className='form-field'>
+                      <label>关系说明</label>
+                      <textarea
+                        rows={3}
+                        value={editRel.description || ''}
+                        onChange={(e) => setEditRel({ ...editRel, description: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className='modal-foot'>
+                    <button onClick={() => setEditRel(null)}>取消</button>
+                    <button
+                      className='primary'
+                      onClick={async () => {
+                        await window.api.updateRelation(editRel.id, {
+                          type: editRel.type,
+                          direction: editRel.direction,
+                          label: editRel.label,
+                          description: editRel.description,
+                        })
+                        setEditRel(null)
+                        setRelations(await window.api.listRelations(novel.id, form.id))
+                        toast('已更新关系', 'success')
                       }}
                     >
                       保存

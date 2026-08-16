@@ -51,7 +51,7 @@ export default function AccountModal({ user, onClose, onLock }) {
   }
 
   return (
-    <div className='modal-mask' onClick={onClose}>
+    <div className='modal-mask'>
       <div className='modal' style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
         <div className='modal-head'>
           账号

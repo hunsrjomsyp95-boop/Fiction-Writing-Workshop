@@ -24,14 +24,7 @@ export default function OutlineView({ novel }) {
   const [leftPanelOpen, setLeftPanelOpen] = useState(true)
   const [leftWidth, setLeftWidth] = useState(320)
   const leftRef = useRef(null)
-  useEffect(() => {
-    if (!leftPanelOpen) return
-    const handler = (e) => {
-      if (leftRef.current && !leftRef.current.contains(e.target)) setLeftPanelOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [leftPanelOpen])
+
   const leftStartResize = useCallback(
     (e) => {
       e.preventDefault()

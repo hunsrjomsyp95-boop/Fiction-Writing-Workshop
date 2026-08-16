@@ -2,6 +2,7 @@
 import { ToastCtx } from './ToastContext.jsx'
 import Home from './components/Home.jsx'
 import Workspace from './components/Workspace.jsx'
+import MobileEditorLayout from './components/MobileEditorLayout.jsx'
 import LoginView from './components/LoginView.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { DialogProvider } from './Dialog.jsx'
@@ -9,17 +10,29 @@ import { ShortcutProvider } from './shortcuts.jsx'
 import { ThemeProvider } from './themes.jsx'
 import BackgroundCanvas from './BackgroundCanvas.jsx'
 
+// 检测是否是移动端
+function isMobile() {
+  return window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+}
+
 export default function App() {
   const [currentNovel, setCurrentNovel] = useState(null)
   const [auth, setAuth] = useState(null)
   const [user, setUser] = useState(null)
   const [toasts, setToasts] = useState([])
+  const [mobile, setMobile] = useState(isMobile())
   const idRef = useRef(0)
 
   const toast = useCallback((msg, type = 'info', duration = 2600) => {
     const id = ++idRef.current
     setToasts((t) => [...t, { id, msg, type }])
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), duration)
+  }, [])
+
+  useEffect(() => {
+    const handleResize = () => setMobile(isMobile())
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   useEffect(() => {
@@ -47,8 +60,8 @@ export default function App() {
     return (
       <ErrorBoundary>
         <ToastCtx.Provider value={toast}>
-          <DialogProvider>
-            <ThemeProvider>
+          <ThemeProvider>
+            <DialogProvider>
               <BackgroundCanvas />
               <div className='app'>
                 <LoginView onSuccess={(u) => setUser(u)} />
@@ -61,19 +74,55 @@ export default function App() {
                   </div>
                 ))}
               </div>
-            </ThemeProvider>
-          </DialogProvider>
+            </DialogProvider>
+          </ThemeProvider>
         </ToastCtx.Provider>
       </ErrorBoundary>
     )
   }
 
+  // 移动端使用编辑器布局
+  if (mobile) {
+    return (
+      <ErrorBoundary>
+        <ToastCtx.Provider value={toast}>
+          <ThemeProvider>
+            <DialogProvider>
+              <BackgroundCanvas />
+              <div className='app'>
+                {currentNovel ? (
+                  <MobileEditorLayout
+                    novel={currentNovel}
+                    user={user}
+                    onExit={() => setCurrentNovel(null)}
+                    toast={toast}
+                  />
+                ) : (
+                  <Home onOpen={(novel) => setCurrentNovel(novel)} toast={toast} />
+                )}
+              </div>
+              <div className='toast-container'>
+                {toasts.map((t) => (
+                  <div key={t.id} className={`toast ${t.type}`}>
+                    <span className='toast-icon'>{t.type === 'error' ? '✕' : t.type === 'success' ? '✓' : 'ℹ'}</span>
+                    <span className='toast-msg'>{t.msg}</span>
+                  </div>
+                ))}
+              </div>
+            </DialogProvider>
+          </ThemeProvider>
+        </ToastCtx.Provider>
+      </ErrorBoundary>
+    )
+  }
+
+  // PC端使用原组件
   return (
     <ErrorBoundary>
       <ToastCtx.Provider value={toast}>
-        <DialogProvider>
-          <ShortcutProvider>
-            <ThemeProvider>
+        <ThemeProvider>
+          <DialogProvider>
+            <ShortcutProvider>
               <BackgroundCanvas />
               <div className='app'>
                 {currentNovel ? (
@@ -95,9 +144,9 @@ export default function App() {
                   </div>
                 ))}
               </div>
-            </ThemeProvider>
-          </ShortcutProvider>
-        </DialogProvider>
+            </ShortcutProvider>
+          </DialogProvider>
+        </ThemeProvider>
       </ToastCtx.Provider>
     </ErrorBoundary>
   )

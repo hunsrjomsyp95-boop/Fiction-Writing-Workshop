@@ -56,6 +56,7 @@ export default function Home({ onOpen, toast }) {
 
   return (
     <div
+      className='home-container'
       style={{
         height: '100%',
         overflow: 'auto',
@@ -86,9 +87,9 @@ export default function Home({ onOpen, toast }) {
             <div style={{ fontSize: 13 }}>还没有创作项目，点击「新建小说」开始你的第一个故事。</div>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+          <div className='home-grid' style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
             {novels.map((n) => (
-              <div className='card' key={n.id} onClick={() => onOpen(n)}>
+              <div className='card home-card' key={n.id} onClick={() => onOpen(n)}>
                 <div className='row' style={{ marginBottom: 6 }}>
                   <div className='name grow' style={{ fontSize: 14 }}>
                     {n.name}
@@ -121,7 +122,7 @@ export default function Home({ onOpen, toast }) {
         )}
 
         {creating && (
-          <div className='modal-mask' onClick={() => setCreating(false)}>
+          <div className='modal-mask'>
             <div className='modal' onClick={(e) => e.stopPropagation()}>
               <div className='modal-head'>新建小说项目</div>
               <div className='modal-body'>
@@ -164,7 +165,7 @@ export default function Home({ onOpen, toast }) {
         )}
 
         <div style={{ textAlign: 'center', marginTop: 32, fontSize: 11, color: 'var(--text-faint)', opacity: 0.6 }}>
-          v1.0 · 免费创作工具
+          v1.2.6 · 免费创作工具
         </div>
       </div>
     </div>

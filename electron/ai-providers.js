@@ -210,23 +210,6 @@ const AI_PROVIDERS = [
     ],
   },
   {
-    id: 'ollama',
-    name: 'Ollama 本地',
-    baseUrl: 'http://localhost:11434/v1',
-    noApiKey: true,
-    models: [
-      { id: 'qwen2.5:14b', name: 'Qwen 2.5 14B', description: '中文优化' },
-      { id: 'qwen2.5:7b', name: 'Qwen 2.5 7B', description: '轻量中文' },
-      { id: 'llama3.1:8b', name: 'Llama 3.1 8B', description: '通用模型' },
-      { id: 'llama3.1:70b', name: 'Llama 3.1 70B', description: '大模型' },
-      { id: 'deepseek-r1:7b', name: 'DeepSeek R1 7B', description: '本地推理' },
-      { id: 'deepseek-r1:14b', name: 'DeepSeek R1 14B', description: '推理增强' },
-      { id: 'mistral:7b', name: 'Mistral 7B', description: '欧洲模型' },
-      { id: 'phi3:mini', name: 'Phi-3 Mini', description: '微软轻量' },
-      { id: 'gemma2:9b', name: 'Gemma 2 9B', description: 'Google 轻量' },
-    ],
-  },
-  {
     id: 'custom',
     name: '自定义',
     baseUrl: '',

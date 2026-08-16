@@ -23,25 +23,24 @@ function createChapter(novelId, { title = '新章节', content = '' } = {}) {
 }
 function updateChapter(id, patch) {
   const d = use()
-  const cur = getChapter(id)
-  if (!cur) return null
-  const content = patch.content !== undefined ? patch.content : cur.content
-  const next = { ...cur, ...patch, id, content, word_count: countChars(content) }
-  const cols = ['title', 'content', 'order_index', 'status', 'summary', 'scene', 'notes', 'word_count']
-  const sets = cols.map((c) => `${c}=?`).join(',')
-  d.prepare(`UPDATE chapters SET ${sets}, updated_at=datetime('now','localtime') WHERE id=?`).run(
-    next.title,
-    next.content,
-    next.order_index,
-    next.status,
-    next.summary,
-    next.scene || '',
-    next.notes || '',
-    next.word_count,
-    id
-  )
-  if (patch.content !== undefined && patch.content !== cur.content) {
-    logWords(novelIdOfChapter(id), next.word_count)
+  const cols = ['title', 'content', 'order_index', 'status', 'summary', 'scene', 'notes']
+  const sets = []
+  const vals = []
+  for (const c of cols) {
+    if (patch[c] !== undefined) {
+      sets.push(`${c}=?`)
+      vals.push(patch[c])
+    }
+  }
+  if (sets.length === 0) return getChapter(id)
+  if (patch.content !== undefined) {
+    sets.push('word_count=?')
+    vals.push(countChars(patch.content))
+  }
+  d.prepare(`UPDATE chapters SET ${sets.join(',')}, updated_at=datetime('now','localtime') WHERE id=?`).run(...vals, id)
+  if (patch.content !== undefined) {
+    const cur = d.prepare('SELECT word_count FROM chapters WHERE id=?').get(id)
+    logWords(novelIdOfChapter(id), cur ? cur.word_count : 0)
   }
   return getChapter(id)
 }

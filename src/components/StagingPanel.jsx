@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, Copy, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Trash2, Copy, ChevronDown, ChevronUp, Pencil, Check, X } from 'lucide-react'
 import { useToast } from '../ToastContext.jsx'
 import { useDialog } from '../Dialog.jsx'
 
@@ -11,6 +11,8 @@ export default function StagingPanel({ onInsert }) {
   const [notes, setNotes] = useState([])
   const [input, setInput] = useState('')
   const [expanded, setExpanded] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [editText, setEditText] = useState('')
   const inputRef = useRef(null)
 
   useEffect(() => {
@@ -45,6 +47,25 @@ export default function StagingPanel({ onInsert }) {
     toast('已复制', 'success')
   }
 
+  const startEdit = (n) => {
+    setEditingId(n.id)
+    setEditText(n.text)
+  }
+
+  const saveEdit = (id) => {
+    const text = editText.trim()
+    if (!text) { toast('内容不能为空', 'error'); return }
+    save(notes.map((n) => (n.id === id ? { ...n, text } : n)))
+    setEditingId(null)
+    setEditText('')
+    toast('已修改', 'success')
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setEditText('')
+  }
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
@@ -75,12 +96,26 @@ export default function StagingPanel({ onInsert }) {
             <div className='staging-note-header'>
               <span className='staging-note-time'>{n.time}</span>
               <div className='grow' />
-              <button className='ghost small' title='复制' onClick={() => copyText(n.text)}>
+              <button className='ghost small' title='复制' onClick={() => copyText(editingId === n.id ? editText : n.text)}>
                 <Copy size={12} />
               </button>
               {onInsert && (
                 <button className='ghost small' title='插入到正文' onClick={() => onInsert(n.text)}>
                   插入
+                </button>
+              )}
+              {editingId === n.id ? (
+                <>
+                  <button className='ghost small' title='保存' onClick={() => saveEdit(n.id)}>
+                    <Check size={12} />
+                  </button>
+                  <button className='ghost small' title='取消' onClick={cancelEdit}>
+                    <X size={12} />
+                  </button>
+                </>
+              ) : (
+                <button className='ghost small' title='编辑' onClick={() => startEdit(n)}>
+                  <Pencil size={12} />
                 </button>
               )}
               <button className='ghost small danger' title='删除' onClick={() => remove(n.id)}>
@@ -90,9 +125,18 @@ export default function StagingPanel({ onInsert }) {
                 {expanded === n.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
               </button>
             </div>
-            <div className={`staging-note-body ${expanded === n.id ? 'expanded' : ''}`}>
-              {n.text}
-            </div>
+            {editingId === n.id ? (
+              <textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                style={{ width: '100%', minHeight: 60, fontSize: 13, marginTop: 4 }}
+                autoFocus
+              />
+            ) : (
+              <div className={`staging-note-body ${expanded === n.id ? 'expanded' : ''}`}>
+                {n.text}
+              </div>
+            )}
           </div>
         ))}
       </div>

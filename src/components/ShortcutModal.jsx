@@ -31,7 +31,7 @@ export default function ShortcutModal({ onClose }) {
   for (const a of actions) (groups[a.group] = groups[a.group] || []).push(a)
 
   return (
-    <div className='modal-mask' onClick={onClose}>
+    <div className='modal-mask'>
       <div className='modal' style={{ width: 640 }} onClick={(e) => e.stopPropagation()}>
         <div className='modal-head'>
           自定义快捷键

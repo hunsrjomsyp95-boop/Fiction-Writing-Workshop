@@ -43,6 +43,7 @@ const names = {
   createCharacter: 'character:create',
   updateCharacter: 'character:update',
   deleteCharacter: 'character:delete',
+  updateCharactersOrder: 'character:update-order',
   characterAppearances: 'character:appearances',
   listWorlds: 'world:list',
   listWorldNames: 'world:names',
@@ -80,8 +81,16 @@ const names = {
   aiClassifyTo: 'ai:classify-to',
   aiExtractTerms: 'ai:extract-terms',
   aiGenerateMap: 'ai:generate-map',
+  aiGenerateMapNodes: 'ai:generate-map-nodes',
   aiClassify: 'ai:classify',
   aiExtractEntities: 'ai:extract-entities',
+  aiGetContext: 'ai:get-context',
+  aiGetHistory: 'ai:get-history',
+  aiAddHistory: 'ai:add-history',
+  aiClearHistory: 'ai:clear-history',
+  aiClearCache: 'ai:clear-cache',
+  aiCacheStats: 'ai:cache-stats',
+  aiHistoryContext: 'ai:history-context',
   listForeshadowings: 'foreshadow:list',
   createForeshadowing: 'foreshadow:create',
   updateForeshadowing: 'foreshadow:update',
@@ -100,6 +109,17 @@ const names = {
   createItem: 'item:create',
   updateItem: 'item:update',
   deleteItem: 'item:delete',
+  listMapViews: 'map:views',
+  createMapView: 'map:view:create',
+  updateMapView: 'map:view:update',
+  deleteMapView: 'map:view:delete',
+  listMapNodes: 'map:nodes',
+  createMapNode: 'map:node:create',
+  updateMapNode: 'map:node:update',
+  deleteMapNode: 'map:node:delete',
+  listMapEdges: 'map:edges',
+  createMapEdge: 'map:edge:create',
+  deleteMapEdge: 'map:edge:delete',
   listPrompts: 'prompt:list',
   createPrompt: 'prompt:create',
   updatePrompt: 'prompt:update',
@@ -145,14 +165,35 @@ const names = {
   exportChapterDocx: 'chapter:export:docx',
   dbCheck: 'db:check',
   dbRepair: 'db:repair',
-  ollamaStatus: 'ollama:status',
-  ollamaStart: 'ollama:start',
-  ollamaModels: 'ollama:models',
-  ollamaPull: 'ollama:pull',
 }
 
 contextBridge.exposeInMainWorld('api', makeApi(names))
 
 contextBridge.exposeInMainWorld('events', {
   onAutoBackup: (cb) => ipcRenderer.on('backup:event', (_e, data) => cb(data)),
+})
+
+// 流式 AI 助手
+contextBridge.exposeInMainWorld('aiStream', {
+  assistant: (requestId, prompt, text) => {
+    ipcRenderer.send('ai:assistant:stream', requestId, prompt, text)
+  },
+  assistantWithSystem: (requestId, systemPrompt, prompt, text) => {
+    ipcRenderer.send('ai:assistant:system:stream', requestId, systemPrompt, prompt, text)
+  },
+  onChunk: (cb) => {
+    const handler = (_e, requestId, chunk) => cb(requestId, chunk)
+    ipcRenderer.on('ai:stream:chunk', handler)
+    return () => ipcRenderer.removeListener('ai:stream:chunk', handler)
+  },
+  onDone: (cb) => {
+    const handler = (_e, requestId, content) => cb(requestId, content)
+    ipcRenderer.on('ai:stream:done', handler)
+    return () => ipcRenderer.removeListener('ai:stream:done', handler)
+  },
+  onError: (cb) => {
+    const handler = (_e, requestId, error) => cb(requestId, error)
+    ipcRenderer.on('ai:stream:error', handler)
+    return () => ipcRenderer.removeListener('ai:stream:error', handler)
+  },
 })

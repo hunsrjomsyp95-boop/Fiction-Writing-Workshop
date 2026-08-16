@@ -46,14 +46,7 @@ export default function AIServiceView({ novel }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [msgs])
-  useEffect(() => {
-    if (!leftPanelOpen) return
-    const handler = (e) => {
-      if (leftRef.current && !leftRef.current.contains(e.target)) setLeftPanelOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [leftPanelOpen])
+
 
   const current = chapters.find((c) => c.id === selId)
 
@@ -103,27 +96,57 @@ export default function AIServiceView({ novel }) {
     return parts.join('\n\n')
   }, [current, attachSettings, novel.id])
 
+  const requestIdRef = useRef(0)
+
+  useEffect(() => {
+    const removeChunk = window.aiStream.onChunk((requestId, chunk) => {
+      setMsgs((m) => {
+        const last = m[m.length - 1]
+        if (last && last.role === 'assistant' && last.requestId === requestId) {
+          return [...m.slice(0, -1), { ...last, content: last.content + chunk }]
+        }
+        return m
+      })
+    })
+
+    const removeDone = window.aiStream.onDone(async (_requestId, _content) => {
+      setBusy(false)
+    })
+
+    const removeError = window.aiStream.onError((_requestId, error) => {
+      setBusy(false)
+      toast('AI 请求失败：' + error, 'error')
+      setMsgs((m) => {
+        const last = m[m.length - 1]
+        if (last && last.role === 'assistant' && last.requestId === _requestId) {
+          return [...m.slice(0, -1), { ...last, content: last.content + '\n\n[请求失败：' + error + ']' }]
+        }
+        return [...m, { role: 'system', content: '请求失败：' + error }]
+      })
+    })
+
+    return () => { removeChunk(); removeDone(); removeError() }
+  }, [toast])
+
   const ask = useCallback(
     async (promptText, system = null, opts = {}) => {
       if (busy) return
       setBusy(true)
-      setMsgs((m) => [...m, { role: 'user', content: promptText }])
       setInput('')
-      try {
-        let ctx = opts.withCtx !== false ? await buildContext() : ''
-        if (opts.extraCtx) ctx = ctx ? ctx + '\n\n' + opts.extraCtx : opts.extraCtx
-        const res = system
-          ? await window.api.aiAssistantWithSystem(system, promptText, ctx)
-          : await window.api.aiAssistant(promptText, ctx)
-        setMsgs((m) => [...m, { role: 'assistant', content: res.content }])
-      } catch (e) {
-        toast('AI 请求失败：' + e.message, 'error')
-        setMsgs((m) => [...m, { role: 'system', content: '请求失败：' + e.message }])
-      } finally {
-        setBusy(false)
+
+      let ctx = opts.withCtx !== false ? await buildContext() : ''
+      if (opts.extraCtx) ctx = ctx ? ctx + '\n\n' + opts.extraCtx : opts.extraCtx
+
+      const requestId = ++requestIdRef.current
+      setMsgs((m) => [...m, { role: 'user', content: promptText }, { role: 'assistant', content: '', requestId }])
+
+      if (system) {
+        window.aiStream.assistantWithSystem(requestId, system, promptText, ctx)
+      } else {
+        window.aiStream.assistant(requestId, promptText, ctx)
       }
     },
-    [busy, buildContext, toast]
+    [busy, buildContext]
   )
 
   const webSearchAsk = useCallback(async () => {
@@ -279,15 +302,16 @@ export default function AIServiceView({ novel }) {
             </div>
           )}
           {msgs.map((m, i) => (
-            <div key={i} className={`ai-msg ${m.role}`}>
-              {m.content}
-            </div>
+            m.role === 'assistant' && !m.content && busy ? (
+              <div key={i} className='ai-msg assistant'>
+                <span className='typing-cursor'>|</span>
+              </div>
+            ) : (
+              <div key={i} className={`ai-msg ${m.role}`}>
+                {m.content}
+              </div>
+            )
           ))}
-          {busy && (
-            <div className='row center'>
-              <div className='spinner' />
-            </div>
-          )}
           <div ref={bottomRef} />
         </div>
 

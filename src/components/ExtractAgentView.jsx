@@ -114,12 +114,15 @@ export default function ExtractAgentView({ novel }) {
           case 'characters':
             await window.api.createCharacter(novel.id, {
               name: item.name || item.title || '未命名',
+              alias: item.alias || '',
               role: item.role || '配角',
               gender: item.gender || '',
               age: item.age || '',
               appearance: item.appearance || '',
               personality: item.personality || '',
               background: item.background || '',
+              relationships: item.relationships || '',
+              notes: item.notes || '',
             })
             break
           case 'worlds':
@@ -134,6 +137,7 @@ export default function ExtractAgentView({ novel }) {
               name: item.name || item.title || '未命名物品',
               category: item.category || '物品',
               description: item.description || '',
+              location: item.location || '',
               importance: item.importance || '普通',
             })
             break
@@ -143,6 +147,7 @@ export default function ExtractAgentView({ novel }) {
               story_time: item.story_time || '',
               description: item.description || '',
               location: item.location || '',
+              status: item.status || '进行中',
             })
             break
           case 'foreshadowings':
@@ -150,6 +155,9 @@ export default function ExtractAgentView({ novel }) {
               title: item.title || item.name || '未命名伏笔',
               type: item.type || '普通',
               setup_desc: item.setup_desc || '',
+              call_desc: item.call_desc || '',
+              resolve_desc: item.resolve_desc || '',
+              status: item.status || '计划',
             })
             break
         }

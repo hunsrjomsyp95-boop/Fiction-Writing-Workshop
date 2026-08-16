@@ -11,10 +11,23 @@ let backupTimer = null
 // 自动更新配置
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
+autoUpdater.logger = {
+  info: (msg) => console.log('[updater]', msg),
+  warn: (msg) => console.warn('[updater]', msg),
+  error: (msg) => console.error('[updater]', msg),
+}
 
 function checkForUpdates() {
-  if (!app.isPackaged) return
-  autoUpdater.checkForUpdates().catch(() => {})
+  if (!app.isPackaged) {
+    console.log('[updater] 开发模式，跳过更新检查')
+    return
+  }
+  console.log('[updater] 检查更新...')
+  autoUpdater.checkForUpdates().then((result) => {
+    console.log('[updater] 检查结果:', result ? `发现 v${result.updateInfo.version}` : '无更新')
+  }).catch((err) => {
+    console.error('[updater] 检查失败:', err.message)
+  })
 }
 
 autoUpdater.on('update-available', (info) => {
@@ -117,6 +130,14 @@ function createWindow() {
 
   win.removeMenu()
 
+  // Ctrl+Shift+I 打开开发者工具
+  win.webContents.on('before-input-event', (e, input) => {
+    if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+      win.webContents.openDevTools({ mode: 'detach' })
+      e.preventDefault()
+    }
+  })
+
   const devUrl = process.env.VITE_DEV_SERVER_URL
   if (devUrl) {
     win.loadURL(devUrl)
@@ -145,9 +166,9 @@ app.whenReady().then(() => {
   } catch (e) {
     console.error('数据库初始化失败:', e)
   }
-  registerAll()
-  startAutoBackup()
   createWindow()
+  registerAll(() => win)
+  startAutoBackup()
 
   // 延迟检查更新（启动后 30 秒）
   setTimeout(checkForUpdates, 30000)

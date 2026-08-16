@@ -47,7 +47,7 @@ const ChapterItem = memo(function ChapterItem({
   return (
     <div
       className={`tree-item ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''}`}
-      draggable
+      draggable={!!onDragStart}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
@@ -75,17 +75,18 @@ const ChapterItem = memo(function ChapterItem({
           {ch.word_count}字 · {ch.status}
         </div>
       </div>
-      <button className='ghost small' title='分屏编辑' onClick={onSplit}>
+      <button className='ghost small' title='分屏编辑' onClick={onSplit} style={{ flexShrink: 0 }}>
         ⧉
       </button>
-      <button className='ghost small danger' onClick={onDelete}>
+      <button className='ghost small danger' onClick={onDelete} style={{ flexShrink: 0 }}>
         ×
       </button>
     </div>
   )
 }, (prev, next) => {
   return prev.ch === next.ch && prev.isActive === next.isActive && prev.isSelected === next.isSelected &&
-    prev.isDragging === next.isDragging && prev.canMoveUp === next.canMoveUp && prev.canMoveDown === next.canMoveDown
+    prev.isDragging === next.isDragging && prev.canMoveUp === next.canMoveUp && prev.canMoveDown === next.canMoveDown &&
+    prev.onDragStart === next.onDragStart && prev.onDragOver === next.onDragOver && prev.onDrop === next.onDrop
 })
 
 function Skeleton({ count = 4 }) {
@@ -135,6 +136,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
   const [leftW, setLeftW] = useState(240)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [searchText, setSearchText] = useState('')
+  const [sortBy, setSortBy] = useState('order') // order | title
   const [dragId, setDragId] = useState(null)
   const [rightOpen, setRightOpen] = useState(true)
   const [rightW, setRightW] = useState(340)
@@ -159,23 +161,9 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
   const leftPanelRef = useRef(null)
   const rightPanelRef = useRef(null)
 
-  useEffect(() => {
-    if (!leftOpen) return
-    const handler = (e) => {
-      if (leftPanelRef.current && !leftPanelRef.current.contains(e.target)) setLeftOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [leftOpen])
 
-  useEffect(() => {
-    if (!rightOpen) return
-    const handler = (e) => {
-      if (rightPanelRef.current && !rightPanelRef.current.contains(e.target)) setRightOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [rightOpen])
+
+
 
   const typingFlush = useCallback(() => {
     if (typingPending.current <= 0) return
@@ -226,10 +214,20 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
     const list = await window.api.listChapters(novel.id)
     setChapters(list)
     if (list.length > 0) {
-      if (!current || !list.find((c) => c.id === current.id)) {
-        setCurrent(list[0])
-        setContent(list[0].content || '')
-        setWordCount((list[0].content || '').replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '').length)
+      const lastId = await window.api.getSetting(`last_chapter_${novel.id}`, '')
+      const last = lastId ? list.find((c) => c.id === Number(lastId)) : null
+      const ch = last || list[0]
+      setCurrent(ch)
+      setContent(ch.content || '')
+      setWordCount((ch.content || '').replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '').length)
+      setSavedWordCount(ch.word_count || 0)
+      const view = editorViewRef.current
+      if (view) {
+        const cur = view.state.doc.toString()
+        const newContent = ch.content || ''
+        if (cur !== newContent) {
+          view.dispatch({ changes: { from: 0, to: cur.length, insert: newContent } })
+        }
       }
     } else {
       setCurrent(null)
@@ -252,6 +250,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
         setChapters((list) => list.map((c) => (c.id === updated.id ? updated : c)))
         setWordCount(updated.word_count)
         setSavedWordCount(updated.word_count)
+        window.api.setSetting(`last_chapter_${novel.id}`, String(chapter.id))
         onSaved?.()
       } catch (e) {
         toast('保存失败：' + e.message, 'error')
@@ -259,7 +258,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
         setSaving(false)
       }
     },
-    [onSaving, onSaved, toast]
+    [novel.id, onSaving, onSaved, toast]
   )
 
   const currentRef = useRef(null)
@@ -267,9 +266,10 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
 
   const handleChange = useCallback(
     (text) => {
+      const chId = currentRef.current?.id
+      contentRef.current = text
       setContent(text)
       onDirty?.()
-      const chId = currentRef.current?.id
       if (saveTimer.current) clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => {
         const ch = currentRef.current
@@ -296,8 +296,14 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
         const chaps = await window.api.listChapters(novel.id)
         const cp = chaps.find((c) => c.title === name)
         if (cp) {
+          if (currentRef.current && currentRef.current.id !== cp.id) {
+            if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+            doSave(currentRef.current, contentRef.current)
+          }
+          currentRef.current = cp
           setCurrent(cp)
           setContent(cp.content || '')
+          contentRef.current = cp.content || ''
           setWordCount((cp.content || '').replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '').length)
           toast(`已跳转到章节：${cp.title}`, 'success')
           return
@@ -364,10 +370,10 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
   )
 
   const saveNow = async () => {
-    if (!current) return
+    if (!currentRef.current) return
     clearTimeout(saveTimer.current)
-    await doSave(current, contentRef.current)
-    await window.api.saveVersion(current.id, contentRef.current, `自动保存 ${new Date().toLocaleTimeString()}`)
+    await doSave(currentRef.current, contentRef.current)
+    await window.api.saveVersion(currentRef.current.id, contentRef.current, `自动保存 ${new Date().toLocaleTimeString()}`)
     toast('已保存并生成版本快照', 'success')
   }
 
@@ -383,13 +389,29 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
   }
 
   const selectChapter = (ch) => {
-    if (current && current.id !== ch.id) doSave(current, contentRef.current)
+    const prev = currentRef.current
+    if (prev && prev.id !== ch.id) {
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+      doSave(prev, contentRef.current)
+    }
+    const newContent = ch.content || ''
+    currentRef.current = ch
     setCurrent(ch)
-    setContent(ch.content || '')
+    setContent(newContent)
     setWordCount(ch.word_count)
     setSavedWordCount(ch.word_count)
     setMarks([])
     setCaret(null)
+    contentRef.current = newContent
+    window.api.setSetting(`last_chapter_${novel.id}`, String(ch.id))
+    const view = editorViewRef.current
+    if (view) {
+      const cur = view.state.doc.toString()
+      if (cur !== newContent) {
+        view.dispatch({ changes: { from: 0, to: cur.length, insert: newContent } })
+      }
+      view.contentDOM.blur()
+    }
   }
 
   selectChapterRef.current = selectChapter
@@ -404,8 +426,8 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
   }
 
   const saveSnapshot = async () => {
-    if (!current) return
-    await window.api.saveVersion(current.id, contentRef.current, `快照 ${new Date().toLocaleString()}`)
+    if (!currentRef.current) return
+    await window.api.saveVersion(currentRef.current.id, contentRef.current, `快照 ${new Date().toLocaleString()}`)
     toast('已保存版本快照', 'success')
   }
 
@@ -514,6 +536,10 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
     ? chapters.filter((ch) => !searchText || ch.title.toLowerCase().includes(searchText.toLowerCase()))
     : []
 
+  const sortedChapters = sortBy === 'title'
+    ? filteredChapters.slice().sort((a, b) => a.title.localeCompare(b.title, 'zh'))
+    : filteredChapters
+
   const realWordCount =
     current && content !== undefined ? (content || '').replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '').length : null
   const delta = realWordCount !== null && savedWordCount !== null ? realWordCount - savedWordCount : null
@@ -524,33 +550,45 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
 
   const wikiLinksToHtml = (text) => text.replace(/\[\[([^\]]+)\]\]/g, '<span class="wiki-link-inline">$1</span>')
 
+  const dragOverIdRef = useRef(null)
+
+  const handleDragStart = useCallback((e, id) => {
+    setDragId(id)
+    e.dataTransfer.effectAllowed = 'move'
+  }, [])
+
   const handleDragOver = useCallback(
-    (e, overId) => {
+    (e, id) => {
       e.preventDefault()
-      if (!dragId || dragId === overId) return
+      e.dataTransfer.dropEffect = 'move'
+      if (!dragId || dragId === id) return
+      if (dragOverIdRef.current === id) return
+      dragOverIdRef.current = id
       setChapters((list) => {
-        const ids = list.map((c) => c.id)
-        const from = ids.indexOf(dragId)
-        const to = ids.indexOf(overId)
+        const from = list.findIndex((c) => c.id === dragId)
+        const to = list.findIndex((c) => c.id === id)
         if (from === -1 || to === -1) return list
-        ids.splice(from, 1)
-        ids.splice(to, 0, dragId)
-        return ids.map((id) => list.find((c) => c.id === id))
+        const next = [...list]
+        const [moved] = next.splice(from, 1)
+        next.splice(to, 0, moved)
+        return next
       })
     },
     [dragId]
   )
 
   const handleDrop = useCallback(async () => {
-    if (!dragId) return
-    setChapters(
-      await window.api.reorderChapters(
-        novel.id,
-        chaptersRef.current.map((c) => c.id)
-      )
-    )
+    if (dragId) {
+      await window.api.reorderChapters(novel.id, chaptersRef.current.map((c) => c.id))
+    }
     setDragId(null)
+    dragOverIdRef.current = null
   }, [dragId, novel.id])
+
+  const handleDragEnd = useCallback(() => {
+    setDragId(null)
+    dragOverIdRef.current = null
+  }, [])
 
   const renderLeft = (ref) => {
     if (!leftOpen) {
@@ -602,13 +640,22 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
               导入 Word
             </button>
           </div>
-          <div style={{ padding: '2px 6px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ padding: '2px 6px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 4 }}>
             <input
-              style={{ width: '100%', fontSize: 12 }}
+              style={{ flex: 1, fontSize: 12 }}
               placeholder='搜索章节标题...'
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
             />
+            <select
+              style={{ fontSize: 11, width: 72 }}
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              title='排序方式'
+            >
+              <option value='order'>手动</option>
+              <option value='title'>名称</option>
+            </select>
           </div>
           {chapters && chapters.length > 0 && (
             <div
@@ -657,7 +704,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
               <div style={{ padding: 16 }}>
                 <Skeleton count={6} />
               </div>
-            ) : filteredChapters.length === 0 ? (
+            ) : sortedChapters.length === 0 ? (
               searchText ? (
                 <div className='empty-state' style={{ padding: 16 }}>
                   <div className='hint'>未找到匹配的章节</div>
@@ -668,7 +715,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
                 </div>
               )
             ) : (
-              filteredChapters.map((ch) => {
+              sortedChapters.map((ch) => {
                 const fi = chapters.indexOf(ch)
                 return (
                   <ChapterItem
@@ -677,8 +724,8 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
                     isActive={current?.id === ch.id}
                     isSelected={selectedIds.has(ch.id)}
                     isDragging={dragId === ch.id}
-                    canMoveUp={fi > 0}
-                    canMoveDown={fi < chapters.length - 1}
+                    canMoveUp={sortBy === 'order' && fi > 0}
+                    canMoveDown={sortBy === 'order' && fi < chapters.length - 1}
                     onSelect={() => selectChapter(ch)}
                     onToggleSelect={() => {
                       const next = new Set(selectedIds)
@@ -697,10 +744,10 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
                       setSplitChapter(ch)
                       setSplitContent(ch.content || '')
                     }}
-                    onDragStart={() => setDragId(ch.id)}
-                    onDragOver={(e) => handleDragOver(e, ch.id)}
-                    onDrop={handleDrop}
-                    onDragEnd={() => setDragId(null)}
+                    onDragStart={sortBy === 'order' ? (e) => handleDragStart(e, ch.id) : undefined}
+                    onDragOver={sortBy === 'order' ? (e) => handleDragOver(e, ch.id) : undefined}
+                    onDrop={sortBy === 'order' ? handleDrop : undefined}
+                    onDragEnd={sortBy === 'order' ? handleDragEnd : undefined}
                   />
                 )
               })
@@ -861,13 +908,16 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
                 padding: '2px 4px',
               }}
               value={current.title}
-              onChange={(e) =>
-                setChapters((l) => l.map((c) => (c.id === current.id ? { ...c, title: e.target.value } : c)))
-              }
+              onChange={(e) => {
+                const newTitle = e.target.value
+                setChapters((l) => l.map((c) => (c.id === current.id ? { ...c, title: newTitle } : c)))
+                setCurrent((c) => (c && c.id === current.id ? { ...c, title: newTitle } : c))
+              }}
               onBlur={async (e) => {
                 if (!current) return
                 const u = await window.api.updateChapter(current.id, { title: e.target.value || '未命名' })
                 setChapters((l) => l.map((c) => (c.id === u.id ? u : c)))
+                setCurrent(u)
               }}
             />
           )}
@@ -973,6 +1023,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
               onChange={async (e) => {
                 const u = await window.api.updateChapter(current.id, { status: e.target.value })
                 setChapters((l) => l.map((c) => (c.id === u.id ? u : c)))
+                setCurrent(u)
               }}
             >
               <option>草稿</option>
@@ -985,7 +1036,9 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
               value={current.scene || ''}
               onBlur={async (e) => {
                 if (!current) return
-                await window.api.updateChapter(current.id, { scene: e.target.value })
+                const u = await window.api.updateChapter(current.id, { scene: e.target.value })
+                setChapters((l) => l.map((c) => (c.id === u.id ? u : c)))
+                setCurrent(u)
               }}
             />
             <input
@@ -994,7 +1047,9 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
               value={current.summary || ''}
               onBlur={async (e) => {
                 if (!current) return
-                await window.api.updateChapter(current.id, { summary: e.target.value })
+                const u = await window.api.updateChapter(current.id, { summary: e.target.value })
+                setChapters((l) => l.map((c) => (c.id === u.id ? u : c)))
+                setCurrent(u)
               }}
             />
             <button
@@ -1011,7 +1066,8 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
                   )
                   const summary = res.content.trim()
                   await window.api.updateChapter(current.id, { summary })
-                  setCurrent({ ...current, summary })
+                  setCurrent((c) => ({ ...c, summary }))
+                  setChapters((l) => l.map((c) => (c.id === current.id ? { ...c, summary } : c)))
                   toast('摘要已生成', 'success')
                 } catch (e) {
                   toast('AI 摘要失败：' + e.message, 'error')
@@ -1026,7 +1082,9 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
               value={current.notes || ''}
               onBlur={async (e) => {
                 if (!current) return
-                await window.api.updateChapter(current.id, { notes: e.target.value })
+                const u = await window.api.updateChapter(current.id, { notes: e.target.value })
+                setChapters((l) => l.map((c) => (c.id === u.id ? u : c)))
+                setCurrent(u)
               }}
             />
           </div>
@@ -1052,7 +1110,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
                 <button
                   className='small'
                   disabled={!prevChapter}
-                  onClick={() => { if (prevChapter) { setCurrent(prevChapter); setContent(prevChapter.content || '') } }}
+                  onClick={() => { if (prevChapter) selectChapterRef.current(prevChapter) }}
                 >
                   {prevChapter ? `◀ ${prevChapter.title}` : '无上一章'}
                 </button>
@@ -1060,7 +1118,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
                 <button
                   className='small'
                   disabled={!nextChapter}
-                  onClick={() => { if (nextChapter) { setCurrent(nextChapter); setContent(nextChapter.content || '') } }}
+                  onClick={() => { if (nextChapter) selectChapterRef.current(nextChapter) }}
                 >
                   {nextChapter ? `${nextChapter.title} ▶` : '无下一章'}
                 </button>

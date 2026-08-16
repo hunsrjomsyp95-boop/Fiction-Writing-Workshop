@@ -97,65 +97,72 @@ export async function buildThinkRequest(key, askPrompt) {
 }
 
 // 拼装项目设定作为 AI 引用上下文（世界观/人物/大纲/年表/伏笔/创作规则）
+// 使用缓存避免重复查询
 export async function buildProjectContext(novelId) {
   try {
-    const [worlds, chars, outlines, timeline, fsh, rules] = await Promise.all([
-      window.api.listWorlds(novelId),
-      window.api.listCharacters(novelId),
-      window.api.listOutlines(novelId),
-      window.api.listTimeline(novelId),
-      window.api.listForeshadowings(novelId),
-      window.api.listWorldRules(novelId),
-    ])
-    const parts = []
-    if (worlds.length)
-      parts.push(
-        `【世界观】${worlds
-          .map((w) => `${w.name}：${(w.content || '').slice(0, 120)}`)
-          .join('\n')
-          .slice(0, 10000)}`
-      )
-    if (chars.length)
-      parts.push(
-        `【人物】${chars
-          .map((c) => `${c.name}（${c.role}）：${(c.personality || c.background || '').slice(0, 100)}`)
-          .join('\n')
-          .slice(0, 6000)}`
-      )
-    if (outlines.length)
-      parts.push(
-        `【大纲】${outlines
-          .map((o) => `${o.title}：${(o.content || '').slice(0, 100)}`)
-          .join('\n')
-          .slice(0, 6000)}`
-      )
-    if (timeline.length)
-      parts.push(
-        `【故事年表】${timeline
-          .map((t) => `${t.story_time || '?'} ${t.title}`)
-          .join('；')
-          .slice(0, 2000)}`
-      )
-    if (fsh.length)
-      parts.push(
-        `【伏笔状态】${fsh
-          .map((f) => `${f.title}(${f.status})`)
-          .join('、')
-          .slice(0, 2000)}`
-      )
-    if (rules.length)
-      parts.push(
-        `【真实与幻想规则】${rules
-          .map(
-            (r) =>
-              `${r.era}/${r.type === '史实' ? '◈ 史实' : '◇ 架空'}：${r.item}${r.content ? ' - ' + r.content.slice(0, 80) : ''}`
-          )
-          .join('\n')
-          .slice(0, 5000)}`
-      )
-    return parts.join('\n\n')
+    const cached = await window.api.aiGetContext(novelId)
+    return cached || ''
   } catch (e) {
-    return ''
+    // 回退到直接查询
+    try {
+      const [worlds, chars, outlines, timeline, fsh, rules] = await Promise.all([
+        window.api.listWorlds(novelId),
+        window.api.listCharacters(novelId),
+        window.api.listOutlines(novelId),
+        window.api.listTimeline(novelId),
+        window.api.listForeshadowings(novelId),
+        window.api.listWorldRules(novelId),
+      ])
+      const parts = []
+      if (worlds.length)
+        parts.push(
+          `【世界观】${worlds
+            .map((w) => `${w.name}：${(w.content || '').slice(0, 120)}`)
+            .join('\n')
+            .slice(0, 10000)}`
+        )
+      if (chars.length)
+        parts.push(
+          `【人物】${chars
+            .map((c) => `${c.name}（${c.role}）：${(c.personality || c.background || '').slice(0, 100)}`)
+            .join('\n')
+            .slice(0, 6000)}`
+        )
+      if (outlines.length)
+        parts.push(
+          `【大纲】${outlines
+            .map((o) => `${o.title}：${(o.content || '').slice(0, 100)}`)
+            .join('\n')
+            .slice(0, 6000)}`
+        )
+      if (timeline.length)
+        parts.push(
+          `【故事年表】${timeline
+            .map((t) => `${t.story_time || '?'} ${t.title}`)
+            .join('；')
+            .slice(0, 2000)}`
+        )
+      if (fsh.length)
+        parts.push(
+          `【伏笔状态】${fsh
+            .map((f) => `${f.title}(${f.status})`)
+            .join('、')
+            .slice(0, 2000)}`
+        )
+      if (rules.length)
+        parts.push(
+          `【真实与幻想规则】${rules
+            .map(
+              (r) =>
+                `${r.era}/${r.type === '史实' ? '◈ 史实' : '◇ 架空'}：${r.item}${r.content ? ' - ' + r.content.slice(0, 80) : ''}`
+            )
+            .join('\n')
+            .slice(0, 5000)}`
+        )
+      return parts.join('\n\n')
+    } catch {
+      return ''
+    }
   }
 }
 

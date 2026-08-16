@@ -192,6 +192,7 @@ function migrate(d) {
     background TEXT DEFAULT '',
     relationships TEXT DEFAULT '',
     notes TEXT DEFAULT '',
+    order_index INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now','localtime')),
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   );
@@ -350,6 +351,48 @@ function migrate(d) {
     updated_at TEXT DEFAULT (datetime('now','localtime'))
   );
 
+  CREATE TABLE IF NOT EXISTS map_nodes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+    view_id INTEGER DEFAULT 0,
+    name TEXT NOT NULL,
+    icon TEXT DEFAULT 'mountain',
+    color TEXT DEFAULT '#7c7cf0',
+    x REAL DEFAULT 0,
+    y REAL DEFAULT 0,
+    note TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+
+  CREATE TABLE IF NOT EXISTS map_edges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+    view_id INTEGER DEFAULT 0,
+    from_id INTEGER NOT NULL REFERENCES map_nodes(id) ON DELETE CASCADE,
+    to_id INTEGER NOT NULL REFERENCES map_nodes(id) ON DELETE CASCADE,
+    label TEXT DEFAULT ''
+  );
+
+  CREATE TABLE IF NOT EXISTS map_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+    type TEXT NOT NULL DEFAULT 'worldmap',
+    name TEXT NOT NULL DEFAULT '默认视图',
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+
+  CREATE TABLE IF NOT EXISTS ai_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    model TEXT DEFAULT '',
+    tokens INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_conv_novel ON ai_conversations(novel_id, created_at);
+
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -390,6 +433,10 @@ function migrate(d) {
   ensureCol('chapters', 'scene', "TEXT DEFAULT ''")
   ensureCol('chapters', 'notes', "TEXT DEFAULT ''")
   ensureCol('chapter_versions', 'tag', "TEXT DEFAULT ''")
+  ensureCol('characters', 'order_index', 'INTEGER DEFAULT 0')
+  ensureCol('characters', 'icon', "TEXT DEFAULT ''")
+  ensureCol('map_nodes', 'view_id', 'INTEGER DEFAULT 0')
+  ensureCol('map_edges', 'view_id', 'INTEGER DEFAULT 0')
   seedTypoDict(d)
   seedPrompts(d)
 }

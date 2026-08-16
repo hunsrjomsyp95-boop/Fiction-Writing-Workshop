@@ -23,7 +23,7 @@ function pickFolder(title) {
   return dialog.showOpenDialog({ title, properties: ['openDirectory', 'createDirectory'] })
 }
 
-function registerAll() {
+function registerAll(getWin) {
   // 项目
   handle('novel:list', () => services.listNovels())
   handle('novel:create', (p) => services.createNovel(p))
@@ -68,6 +68,7 @@ function registerAll() {
   handle('character:create', (novelId, p) => services.createCharacter(novelId, p))
   handle('character:update', (id, p) => services.updateCharacter(id, p))
   handle('character:delete', (id) => services.deleteCharacter(id))
+  handle('character:update-order', (ids) => services.updateCharactersOrder(ids))
 
   // 角色出场追踪：扫描所有章节内容，返回角色出现的章节列表
   handle('character:appearances', (novelId, characterId) => {
@@ -193,29 +194,67 @@ function registerAll() {
   handle('ai:proofread', (text) => ai.aiProofread(text))
   handle('ai:assistant', (prompt, text) => ai.aiAssistant(prompt, text))
   handle('ai:assistant:system', (sys, prompt, text) => ai.aiAssistantWithSystem(sys, prompt, text))
+
+  // 流式 AI 助手
+  ipcMain.on('ai:assistant:stream', async (event, requestId, prompt, text) => {
+    try {
+      const res = await ai.aiAssistantStream(prompt, text, {
+        onChunk: (chunk) => {
+          const w = getWin()
+          if (w && !w.isDestroyed()) {
+            w.webContents.send('ai:stream:chunk', requestId, chunk)
+          }
+        },
+      })
+      const w = getWin()
+      if (w && !w.isDestroyed()) {
+        w.webContents.send('ai:stream:done', requestId, res.content)
+      }
+    } catch (err) {
+      const w = getWin()
+      if (w && !w.isDestroyed()) {
+        w.webContents.send('ai:stream:error', requestId, err.message)
+      }
+    }
+  })
+
+  ipcMain.on('ai:assistant:system:stream', async (event, requestId, systemPrompt, prompt, text) => {
+    try {
+      const res = await ai.aiAssistantWithSystemStream(systemPrompt, prompt, text, {
+        onChunk: (chunk) => {
+          const w = getWin()
+          if (w && !w.isDestroyed()) {
+            w.webContents.send('ai:stream:chunk', requestId, chunk)
+          }
+        },
+      })
+      const w = getWin()
+      if (w && !w.isDestroyed()) {
+        w.webContents.send('ai:stream:done', requestId, res.content)
+      }
+    } catch (err) {
+      const w = getWin()
+      if (w && !w.isDestroyed()) {
+        w.webContents.send('ai:stream:error', requestId, err.message)
+      }
+    }
+  })
   handle('ai:analyze-settings', (text) => ai.aiAnalyzeSettings(text))
   handle('ai:classify-to', (text, categories) => ai.aiClassifyTo(text, categories))
   handle('ai:extract-terms', (text) => ai.aiExtractTerms(text))
   handle('ai:generate-map', (text) => ai.aiGenerateMap(text))
+  handle('ai:generate-map-nodes', (text) => ai.aiGenerateMapNodes(text))
   handle('ai:extract-entities', (text) => ai.aiExtractEntities(text))
   handle('ai:classify', (text, useAI) => (useAI ? ai.classifyMaterialAI(text) : ai.classifyLocal(text)))
 
-  // Ollama 本地模型管理
-  const ollama = require('./ollama')
-  handle('ollama:status', async () => ({
-    installed: ollama.isInstalled(),
-    running: await ollama.isRunning(),
-  }))
-  handle('ollama:start', async () => {
-    const ok = await ollama.ensureRunning()
-    return { ok, models: ok ? await ollama.listModels() : [] }
-  })
-  handle('ollama:models', async () => ollama.listModels())
-  handle('ollama:pull', async (modelId) => {
-    const lines = []
-    await ollama.pullModel(modelId, (data) => lines.push(data))
-    return { ok: true, models: await ollama.listModels() }
-  })
+  // AI 记忆管理
+  handle('ai:get-context', (novelId) => ai.getCachedProjectContext(novelId))
+  handle('ai:get-history', (novelId) => ai.getConversationHistory(novelId))
+  handle('ai:add-history', (novelId, role, content) => ai.addToConversationHistory(novelId, role, content))
+  handle('ai:clear-history', (novelId) => ai.clearConversationHistory(novelId))
+  handle('ai:clear-cache', (novelId) => ai.clearContextCache(novelId))
+  handle('ai:cache-stats', () => ai.getCacheStats())
+  handle('ai:history-context', (novelId, max) => ai.getHistoryForContext(novelId, max))
 
   // 联网搜索
   handle('search:web', (query, count) => search.webSearch(query, count))
@@ -250,6 +289,19 @@ function registerAll() {
   handle('item:create', (novelId, p) => services.createItem(novelId, p))
   handle('item:update', (id, p) => services.updateItem(id, p))
   handle('item:delete', (id) => services.deleteItem(id))
+
+  // 世界地图
+  handle('map:views', (novelId, type) => services.listViews(novelId, type))
+  handle('map:view:create', (novelId, type, name) => services.createView(novelId, type, name))
+  handle('map:view:update', (id, p) => services.updateView(id, p))
+  handle('map:view:delete', (id) => services.deleteView(id))
+  handle('map:nodes', (novelId, viewId) => services.listNodes(novelId, viewId))
+  handle('map:node:create', (novelId, p) => services.createNode(novelId, p))
+  handle('map:node:update', (id, p) => services.updateNode(id, p))
+  handle('map:node:delete', (id) => { services.deleteEdgesByNode(id); services.deleteNode(id) })
+  handle('map:edges', (novelId, viewId) => services.listEdges(novelId, viewId))
+  handle('map:edge:create', (novelId, fromId, toId, label, viewId) => services.createEdge(novelId, fromId, toId, label, viewId))
+  handle('map:edge:delete', (id) => services.deleteEdge(id))
 
   // AI 提示词库
   handle('prompt:list', (novelId) => services.listPrompts(novelId))

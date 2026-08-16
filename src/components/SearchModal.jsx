@@ -68,7 +68,7 @@ export default function SearchModal({ novel, onClose, onJump }) {
   }
 
   return (
-    <div className='modal-mask' onClick={onClose}>
+    <div className='modal-mask'>
       <div className='modal' style={{ width: 720 }} onClick={(e) => e.stopPropagation()}>
         <div className='modal-head'>
           <div className='tabs' style={{ background: 'none', border: 'none', padding: 0 }}>

@@ -46,7 +46,7 @@ function DialogModal({ state, onClose }) {
   }
 
   return (
-    <div className='modal-mask' onClick={() => onClose(state.type === 'prompt' ? null : false)}>
+    <div className='modal-mask'>
       <div
         className='modal'
         style={{ width: state.type === 'confirm' ? 460 : 440 }}

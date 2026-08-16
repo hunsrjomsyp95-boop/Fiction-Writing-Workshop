@@ -302,7 +302,7 @@ const Editor = forwardRef(function Editor(
   }, [ready])
 
   useEffect(() => {
-    if (!viewRef.current || viewRef.current.hasFocus) return
+    if (!viewRef.current) return
     const cur = viewRef.current.state.doc.toString()
     if (cur !== (value || '')) {
       typingRef.current.skip++

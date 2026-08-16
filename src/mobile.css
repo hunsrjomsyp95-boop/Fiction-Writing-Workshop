@@ -1,0 +1,1054 @@
+/* ═══════════════════════════════════════════
+   小说创作工坊 - 移动端适配样式
+   ═══════════════════════════════════════════ */
+
+/* ─── 移动端断点 ─── */
+@media (max-width: 768px) {
+  /* ─── 基础调整 ─── */
+  :root {
+    --font-size: 15px;
+    --sp-1: 6px;
+    --sp-2: 10px;
+    --sp-3: 14px;
+    --sp-4: 18px;
+    --sp-5: 28px;
+    --radius: 10px;
+    --radius-sm: 7px;
+  }
+
+  body {
+    font-size: var(--font-size);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* ─── 触摸优化 ─── */
+  button {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px 16px;
+    font-size: 15px;
+  }
+
+  button.small {
+    min-height: 36px;
+    min-width: 36px;
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  input,
+  textarea,
+  select {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 16px; /* 防止iOS缩放 */
+  }
+
+  textarea {
+    min-height: 120px;
+  }
+
+  /* ─── 顶部栏适配 ─── */
+  .topbar {
+    height: 52px;
+    padding: 0 var(--sp-3);
+  }
+
+  .topbar .title {
+    font-size: 16px;
+    max-width: 160px;
+  }
+
+  /* ─── 侧边栏适配 ─── */
+  .sidebar {
+    width: 60px;
+  }
+
+  .sidebar button {
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    font-size: 10px;
+  }
+
+  /* ─── 导航栏适配 ─── */
+  .nav-rail-collapsed {
+    width: 36px;
+  }
+
+  .nav-rail-collapsed button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* ─── 内容区域适配 ─── */
+  .content {
+    flex-direction: column;
+  }
+
+  /* ─── 首页适配 ─── */
+  .home-container {
+    padding: 16px !important;
+  }
+
+  .home-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .home-card {
+    padding: 16px !important;
+  }
+
+  .home-card .name {
+    font-size: 16px !important;
+  }
+
+  .home-card .desc {
+    font-size: 14px !important;
+  }
+
+  /* ─── 工作区适配 ─── */
+  .workspace {
+    flex-direction: column;
+  }
+
+  .workspace-sidebar {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 50vh;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .workspace-main {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* ─── 章节列表适配 ─── */
+  .chapters-list {
+    padding: 8px !important;
+  }
+
+  .chapter-item {
+    padding: 12px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .chapter-item .title {
+    font-size: 15px !important;
+  }
+
+  .chapter-item .meta {
+    font-size: 13px !important;
+  }
+
+  /* ─── 编辑器适配 ─── */
+  .editor-container {
+    padding: 12px !important;
+  }
+
+  .editor-toolbar {
+    padding: 8px !important;
+    gap: 8px !important;
+  }
+
+  .editor-toolbar button {
+    min-height: 40px;
+    min-width: 40px;
+  }
+
+  .editor-content {
+    font-size: 17px !important;
+    line-height: 1.8 !important;
+    padding: 16px !important;
+  }
+
+  /* ─── 表单适配 ─── */
+  .form-group {
+    margin-bottom: 16px !important;
+  }
+
+  .form-label {
+    font-size: 14px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .form-input {
+    width: 100%;
+  }
+
+  /* ─── 模态框适配 ─── */
+  .modal-overlay {
+    padding: 16px !important;
+  }
+
+  .modal-content {
+    max-width: 100% !important;
+    max-height: 90vh !important;
+    border-radius: 12px !important;
+  }
+
+  .modal-header {
+    padding: 16px !important;
+  }
+
+  .modal-body {
+    padding: 16px !important;
+  }
+
+  .modal-footer {
+    padding: 16px !important;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .modal-footer button {
+    width: 100%;
+  }
+
+  /* ─── 卡片适配 ─── */
+  .card {
+    padding: 14px !important;
+    border-radius: 10px !important;
+  }
+
+  .card .name {
+    font-size: 15px !important;
+  }
+
+  .card .desc {
+    font-size: 13px !important;
+  }
+
+  /* ─── 面板适配 ─── */
+  .panel {
+    padding: 14px !important;
+    border-radius: 10px !important;
+  }
+
+  .panel-header {
+    padding: 12px 14px !important;
+  }
+
+  .panel-title {
+    font-size: 15px !important;
+  }
+
+  /* ─── 按钮组适配 ─── */
+  .button-group {
+    gap: 10px !important;
+  }
+
+  .button-group button {
+    flex: 1;
+  }
+
+  /* ─── 列表适配 ─── */
+  .list-item {
+    padding: 14px !important;
+    min-height: 56px;
+  }
+
+  .list-item .name {
+    font-size: 15px !important;
+  }
+
+  .list-item .meta {
+    font-size: 13px !important;
+  }
+
+  /* ─── 标签适配 ─── */
+  .tag {
+    padding: 6px 12px !important;
+    font-size: 13px !important;
+  }
+
+  /* ─── 搜索框适配 ─── */
+  .search-input {
+    min-height: 48px !important;
+    padding: 12px 16px !important;
+    font-size: 16px !important;
+  }
+
+  /* ─── 工具栏适配 ─── */
+  .toolbar {
+    padding: 10px !important;
+    gap: 10px !important;
+  }
+
+  .toolbar button {
+    min-height: 40px;
+    min-width: 40px;
+  }
+
+  /* ─── 标签页适配 ─── */
+  .tabs {
+    gap: 4px !important;
+  }
+
+  .tab {
+    padding: 10px 16px !important;
+    font-size: 14px !important;
+    min-height: 44px;
+  }
+
+  /* ─── 对话框适配 ─── */
+  .dialog {
+    max-width: 100% !important;
+    margin: 16px !important;
+  }
+
+  .dialog-title {
+    font-size: 18px !important;
+  }
+
+  .dialog-message {
+    font-size: 15px !important;
+  }
+
+  /* ─── 提示框适配 ─── */
+  .toast {
+    padding: 12px 16px !important;
+    font-size: 14px !important;
+    border-radius: 10px !important;
+  }
+
+  /* ─── 统计卡片适配 ─── */
+  .stat-card {
+    padding: 16px !important;
+  }
+
+  .stat-value {
+    font-size: 24px !important;
+  }
+
+  .stat-label {
+    font-size: 13px !important;
+  }
+
+  /* ─── 大纲适配 ─── */
+  .outline-tree {
+    padding: 8px !important;
+  }
+
+  .outline-node {
+    padding: 10px !important;
+    margin-bottom: 6px !important;
+  }
+
+  .outline-node .title {
+    font-size: 15px !important;
+  }
+
+  /* ─── 人物卡片适配 ─── */
+  .character-card {
+    padding: 14px !important;
+  }
+
+  .character-card .name {
+    font-size: 16px !important;
+  }
+
+  .character-card .role {
+    font-size: 13px !important;
+  }
+
+  /* ─── 世界观适配 ─── */
+  .world-card {
+    padding: 14px !important;
+  }
+
+  .world-card .name {
+    font-size: 15px !important;
+  }
+
+  .world-card .category {
+    font-size: 12px !important;
+  }
+
+  /* ─── 资料库适配 ─── */
+  .material-card {
+    padding: 14px !important;
+  }
+
+  .material-card .title {
+    font-size: 15px !important;
+  }
+
+  .material-card .type {
+    font-size: 12px !important;
+  }
+
+  /* ─── 时间线适配 ─── */
+  .timeline-item {
+    padding: 14px !important;
+  }
+
+  .timeline-item .title {
+    font-size: 15px !important;
+  }
+
+  .timeline-item .time {
+    font-size: 13px !important;
+  }
+
+  /* ─── 伏笔适配 ─── */
+  .foreshadow-item {
+    padding: 14px !important;
+  }
+
+  .foreshadow-item .title {
+    font-size: 15px !important;
+  }
+
+  .foreshadow-item .status {
+    font-size: 12px !important;
+  }
+
+  /* ─── 关系图适配 ─── */
+  .relation-graph {
+    min-height: 300px !important;
+  }
+
+  .relation-node {
+    padding: 10px !important;
+  }
+
+  .relation-node .name {
+    font-size: 14px !important;
+  }
+
+  /* ─── 物品适配 ─── */
+  .item-card {
+    padding: 14px !important;
+  }
+
+  .item-card .name {
+    font-size: 15px !important;
+  }
+
+  .item-card .category {
+    font-size: 12px !important;
+  }
+
+  /* ─── 提示词适配 ─── */
+  .prompt-card {
+    padding: 14px !important;
+  }
+
+  .prompt-card .name {
+    font-size: 15px !important;
+  }
+
+  .prompt-card .category {
+    font-size: 12px !important;
+  }
+
+  /* ─── 规则适配 ─── */
+  .rule-card {
+    padding: 14px !important;
+  }
+
+  .rule-card .item {
+    font-size: 15px !important;
+  }
+
+  .rule-card .type {
+    font-size: 12px !important;
+  }
+
+  /* ─── 设置适配 ─── */
+  .settings-section {
+    padding: 16px !important;
+  }
+
+  .settings-title {
+    font-size: 16px !important;
+  }
+
+  .settings-item {
+    padding: 14px !important;
+  }
+
+  .settings-item .label {
+    font-size: 15px !important;
+  }
+
+  .settings-item .desc {
+    font-size: 13px !important;
+  }
+
+  /* ─── 登录适配 ─── */
+  .login-container {
+    padding: 24px !important;
+  }
+
+  .login-form {
+    padding: 24px !important;
+  }
+
+  .login-title {
+    font-size: 24px !important;
+  }
+
+  .login-input {
+    min-height: 48px !important;
+    padding: 14px 18px !important;
+    font-size: 16px !important;
+  }
+
+  .login-button {
+    min-height: 48px !important;
+    font-size: 16px !important;
+  }
+
+  /* ─── 帮助适配 ─── */
+  .help-content {
+    padding: 16px !important;
+  }
+
+  .help-section {
+    margin-bottom: 20px !important;
+  }
+
+  .help-title {
+    font-size: 16px !important;
+  }
+
+  .help-text {
+    font-size: 14px !important;
+    line-height: 1.7 !important;
+  }
+
+  /* ─── 快捷键适配 ─── */
+  .shortcut-list {
+    padding: 12px !important;
+  }
+
+  .shortcut-item {
+    padding: 10px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .shortcut-key {
+    font-size: 13px !important;
+    padding: 4px 8px !important;
+  }
+
+  .shortcut-desc {
+    font-size: 14px !important;
+  }
+
+  /* ─── 版本历史适配 ─── */
+  .version-list {
+    padding: 12px !important;
+  }
+
+  .version-item {
+    padding: 12px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .version-item .time {
+    font-size: 13px !important;
+  }
+
+  .version-item .summary {
+    font-size: 14px !important;
+  }
+
+  /* ─── 错字检查适配 ─── */
+  .typo-list {
+    padding: 12px !important;
+  }
+
+  .typo-item {
+    padding: 10px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .typo-item .wrong {
+    font-size: 14px !important;
+  }
+
+  .typo-item .right {
+    font-size: 14px !important;
+  }
+
+  /* ─── AI面板适配 ─── */
+  .ai-panel {
+    padding: 12px !important;
+  }
+
+  .ai-input {
+    min-height: 48px !important;
+    padding: 12px 16px !important;
+    font-size: 16px !important;
+  }
+
+  .ai-response {
+    padding: 12px !important;
+    font-size: 14px !important;
+    line-height: 1.7 !important;
+  }
+
+  /* ─── 搜索结果适配 ─── */
+  .search-results {
+    padding: 12px !important;
+  }
+
+  .search-result-item {
+    padding: 12px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .search-result-item .title {
+    font-size: 15px !important;
+  }
+
+  .search-result-item .snippet {
+    font-size: 13px !important;
+  }
+
+  /* ─── 导出适配 ─── */
+  .export-options {
+    padding: 16px !important;
+    gap: 12px !important;
+  }
+
+  .export-option {
+    padding: 16px !important;
+  }
+
+  .export-option .name {
+    font-size: 15px !important;
+  }
+
+  .export-option .desc {
+    font-size: 13px !important;
+  }
+
+  /* ─── 备份适配 ─── */
+  .backup-list {
+    padding: 12px !important;
+  }
+
+  .backup-item {
+    padding: 12px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .backup-item .time {
+    font-size: 13px !important;
+  }
+
+  .backup-item .size {
+    font-size: 12px !important;
+  }
+
+  /* ─── 统计图表适配 ─── */
+  .chart-container {
+    padding: 12px !important;
+    min-height: 200px !important;
+  }
+
+  .chart-label {
+    font-size: 12px !important;
+  }
+
+  .chart-value {
+    font-size: 14px !important;
+  }
+
+  /* ─── 进度条适配 ─── */
+  .progress-bar {
+    height: 8px !important;
+    border-radius: 4px !important;
+  }
+
+  .progress-text {
+    font-size: 13px !important;
+  }
+
+  /* ─── 标签输入适配 ─── */
+  .tag-input {
+    min-height: 44px !important;
+    padding: 10px 14px !important;
+  }
+
+  .tag-item {
+    padding: 6px 12px !important;
+    font-size: 13px !important;
+  }
+
+  /* ─── 日期选择适配 ─── */
+  .date-picker {
+    min-height: 44px !important;
+    padding: 10px 14px !important;
+  }
+
+  .date-picker .selected {
+    font-size: 15px !important;
+  }
+
+  /* ─── 下拉菜单适配 ─── */
+  .dropdown {
+    min-height: 44px !important;
+    padding: 10px 14px !important;
+  }
+
+  .dropdown-menu {
+    max-height: 60vh !important;
+    overflow-y: auto !important;
+  }
+
+  .dropdown-item {
+    padding: 12px 16px !important;
+    font-size: 15px !important;
+    min-height: 44px;
+  }
+
+  /* ─── 开关适配 ─── */
+  .switch {
+    width: 52px !important;
+    height: 28px !important;
+  }
+
+  .switch-thumb {
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  /* ─── 复选框适配 ─── */
+  .checkbox {
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  .checkbox-label {
+    font-size: 15px !important;
+  }
+
+  /* ─── 单选框适配 ─── */
+  .radio {
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  .radio-label {
+    font-size: 15px !important;
+  }
+
+  /* ─── 滑块适配 ─── */
+  .slider {
+    height: 44px !important;
+  }
+
+  .slider-track {
+    height: 6px !important;
+  }
+
+  .slider-thumb {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  /* ─── 工具提示适配 ─── */
+  .tooltip {
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+    border-radius: 8px !important;
+  }
+
+  /* ─── 徽章适配 ─── */
+  .badge {
+    padding: 4px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* ─── 分隔符适配 ─── */
+  .divider {
+    margin: 12px 0 !important;
+  }
+
+  /* ─── 空状态适配 ─── */
+  .empty-state {
+    padding: 32px 24px !important;
+  }
+
+  .empty-state .icon {
+    font-size: 48px !important;
+  }
+
+  .empty-state .text {
+    font-size: 15px !important;
+  }
+
+  /* ─── 加载状态适配 ─── */
+  .loading {
+    padding: 24px !important;
+  }
+
+  .loading-spinner {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .loading-text {
+    font-size: 14px !important;
+  }
+
+  /* ─── 错误状态适配 ─── */
+  .error-state {
+    padding: 32px 24px !important;
+  }
+
+  .error-state .icon {
+    font-size: 48px !important;
+  }
+
+  .error-state .message {
+    font-size: 15px !important;
+  }
+
+  .error-state .action {
+    min-height: 48px !important;
+    font-size: 16px !important;
+  }
+}
+
+/* ─── 小屏幕手机 (< 480px) ─── */
+@media (max-width: 480px) {
+  :root {
+    --font-size: 14px;
+    --sp-1: 5px;
+    --sp-2: 8px;
+    --sp-3: 12px;
+    --sp-4: 16px;
+    --sp-5: 24px;
+  }
+
+  .topbar {
+    height: 48px;
+    padding: 0 var(--sp-2);
+  }
+
+  .topbar .title {
+    font-size: 15px;
+    max-width: 120px;
+  }
+
+  .sidebar {
+    width: 50px;
+  }
+
+  .sidebar button {
+    width: 42px;
+    height: 42px;
+    font-size: 9px;
+  }
+
+  .home-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .editor-content {
+    font-size: 16px !important;
+    padding: 12px !important;
+  }
+
+  .modal-content {
+    margin: 8px !important;
+    max-height: 95vh !important;
+  }
+
+  .modal-header {
+    padding: 12px !important;
+  }
+
+  .modal-body {
+    padding: 12px !important;
+  }
+
+  .modal-footer {
+    padding: 12px !important;
+  }
+
+  .card {
+    padding: 12px !important;
+  }
+
+  .panel {
+    padding: 12px !important;
+  }
+
+  button {
+    min-height: 42px;
+    min-width: 42px;
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+
+  input,
+  textarea,
+  select {
+    min-height: 42px;
+    padding: 8px 12px;
+    font-size: 15px;
+  }
+}
+
+/* ─── 横屏适配 ─── */
+@media (orientation: landscape) and (max-height: 500px) {
+  .topbar {
+    height: 40px;
+  }
+
+  .sidebar {
+    width: 50px;
+  }
+
+  .sidebar button {
+    width: 40px;
+    height: 40px;
+  }
+
+  .modal-content {
+    max-height: 95vh !important;
+  }
+
+  .editor-content {
+    min-height: 60vh;
+  }
+}
+
+/* ─── 安全区域适配 (刘海屏/药丸屏) ─── */
+@supports (padding: env(safe-area-inset-top)) {
+  .topbar {
+    padding-top: env(safe-area-inset-top);
+    height: calc(52px + env(safe-area-inset-top));
+  }
+
+  .sidebar {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .modal-footer {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .bottom-bar {
+    padding-bottom: env(safe-area-inset-bottom);
+    height: calc(56px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ─── 触摸设备优化 ─── */
+@media (hover: none) and (pointer: coarse) {
+  button:hover {
+    background: var(--bg-3);
+  }
+
+  button.primary:hover {
+    background: var(--accent);
+  }
+
+  button.danger:hover {
+    background: transparent;
+  }
+
+  button.ghost:hover {
+    background: transparent;
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    box-shadow: none;
+  }
+}
+
+/* ─── 深色模式优化 ─── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f0f1a;
+    --bg-2: #1a1a28;
+    --bg-3: #222233;
+    --bg-hover: #2a2a3e;
+    --border: #3a3a52;
+    --text: #e0e0ee;
+    --text-dim: #a8a8c0;
+    --text-faint: #7878a0;
+  }
+}
+
+/* ─── 浅色模式 ─── */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f5f5;
+    --bg-2: #ffffff;
+    --bg-3: #e8e8e8;
+    --bg-hover: #d8d8d8;
+    --border: #d0d0d0;
+    --text: #333333;
+    --text-dim: #666666;
+    --text-faint: #999999;
+    --accent: #5b5bef;
+    --accent-2: #3b82f6;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --orange: #f97316;
+    --cyan: #06b6d4;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .topbar {
+    background: var(--bg-2);
+    border-bottom-color: var(--border);
+  }
+
+  .sidebar {
+    background: var(--bg-2);
+    border-right-color: var(--border);
+  }
+
+  .card {
+    background: var(--bg-2);
+    border-color: var(--border);
+  }
+
+  .panel {
+    background: var(--bg-2);
+    border-color: var(--border);
+  }
+
+  input,
+  textarea,
+  select {
+    background: var(--bg-2);
+    border-color: var(--border);
+  }
+
+  button {
+    background: var(--bg-3);
+  }
+
+  button:hover {
+    background: var(--bg-hover);
+  }
+
+  button.primary {
+    background: var(--accent);
+  }
+
+  button.primary:hover {
+    background: #6b6bf5;
+  }
+}

@@ -73,46 +73,82 @@ export default function AIPanel({ novel, chapter, contentRef, cursorRef, onApply
     window.api.listPrompts(novel.id).then(setPrompts)
   }, [novel.id])
 
+  // 加载历史对话
+  useEffect(() => {
+    if (novel?.id) {
+      window.api.aiGetHistory(novel.id).then((history) => {
+        if (history && history.length > 0) {
+          setMsgs(history.map(h => ({ role: h.role, content: h.content })))
+        }
+      }).catch(() => {})
+    }
+  }, [novel?.id])
+
+  const requestIdRef = useRef(0)
+
+  useEffect(() => {
+    const removeChunk = window.aiStream.onChunk((requestId, chunk) => {
+      setMsgs((m) => {
+        const last = m[m.length - 1]
+        if (last && last.role === 'assistant' && last.requestId === requestId) {
+          return [...m.slice(0, -1), { ...last, content: last.content + chunk }]
+        }
+        return m
+      })
+    })
+
+    const removeDone = window.aiStream.onDone(async (requestId, content) => {
+      setBusy(false)
+      try { await window.api.aiAddHistory(novel.id, 'assistant', content) } catch (e) { /* ignore */ }
+    })
+
+    const removeError = window.aiStream.onError((requestId, error) => {
+      setBusy(false)
+      toast('AI 请求失败：' + error, 'error')
+      setMsgs((m) => {
+        const last = m[m.length - 1]
+        if (last && last.role === 'assistant' && last.requestId === requestId) {
+          return [...m.slice(0, -1), { ...last, content: last.content + '\n\n[请求失败：' + error + ']' }]
+        }
+        return [...m, { role: 'system', content: '请求失败：' + error }]
+      })
+    })
+
+    return () => { removeChunk(); removeDone(); removeError() }
+  }, [novel.id, toast])
+
   const ask = async (prompt, systemPrompt = null, opts = {}) => {
     if (busy) return
     setBusy(true)
-    setMsgs((m) => [...m, { role: 'user', content: prompt }])
     setInput('')
-    try {
-      let ctx = opts.withCtx !== false && useContext && chapter ? contentRef.current : ''
-      if (opts.withCtx !== false && attachSettings) {
-        const extra = await buildProjectContext(novel.id)
-        if (extra) ctx = ctx ? ctx + '\n\n' + extra : extra
-        // 自动携带前一章摘要
-        if (chapter?.id) {
-          try {
-            const chaps = await window.api.listChapters(novel.id)
-            const idx = chaps.findIndex((c) => c.id === chapter.id)
-            if (idx > 0) {
-              const prev = chaps[idx - 1]
-              if (prev?.summary) {
-                ctx += `\n\n【上一章摘要：${prev.title}】${prev.summary}`
-              }
+    try { await window.api.aiAddHistory(novel.id, 'user', prompt) } catch (e) { /* ignore */ }
+
+    let ctx = opts.withCtx !== false && useContext && chapter ? contentRef.current : ''
+    if (opts.withCtx !== false && attachSettings) {
+      const extra = await buildProjectContext(novel.id)
+      if (extra) ctx = ctx ? ctx + '\n\n' + extra : extra
+      if (chapter?.id) {
+        try {
+          const chaps = await window.api.listChapters(novel.id)
+          const idx = chaps.findIndex((c) => c.id === chapter.id)
+          if (idx > 0) {
+            const prev = chaps[idx - 1]
+            if (prev?.summary) {
+              ctx += `\n\n【上一章摘要：${prev.title}】${prev.summary}`
             }
-          } catch {
-            // ignore
           }
-        }
+        } catch { /* ignore */ }
       }
-      if (opts.extraCtx) ctx = ctx ? ctx + '\n\n' + opts.extraCtx : opts.extraCtx
-      let text = ctx
-      if (systemPrompt) {
-        const res = await window.api.aiAssistantWithSystem(systemPrompt, prompt, text)
-        setMsgs((m) => [...m, { role: 'assistant', content: res.content }])
-      } else {
-        const res = await window.api.aiAssistant(prompt, text)
-        setMsgs((m) => [...m, { role: 'assistant', content: res.content }])
-      }
-    } catch (e) {
-      toast('AI 请求失败：' + e.message, 'error')
-      setMsgs((m) => [...m, { role: 'system', content: '请求失败：' + e.message }])
-    } finally {
-      setBusy(false)
+    }
+    if (opts.extraCtx) ctx = ctx ? ctx + '\n\n' + opts.extraCtx : opts.extraCtx
+
+    const requestId = ++requestIdRef.current
+    setMsgs((m) => [...m, { role: 'user', content: prompt }, { role: 'assistant', content: '', requestId }])
+
+    if (systemPrompt) {
+      window.aiStream.assistantWithSystem(requestId, systemPrompt, prompt, ctx)
+    } else {
+      window.aiStream.assistant(requestId, prompt, ctx)
     }
   }
 
@@ -346,15 +382,16 @@ export default function AIPanel({ novel, chapter, contentRef, cursorRef, onApply
           </div>
         )}
         {msgs.map((m, i) => (
-          <div key={i} className={`ai-msg ${m.role}`}>
-            {m.content}
-          </div>
+          m.role === 'assistant' && !m.content && busy ? (
+            <div key={i} className='ai-msg assistant'>
+              <span className='typing-cursor'>|</span>
+            </div>
+          ) : (
+            <div key={i} className={`ai-msg ${m.role}`}>
+              {m.content}
+            </div>
+          )
         ))}
-        {busy && (
-          <div className='row center'>
-            <div className='spinner' />
-          </div>
-        )}
         {candidates.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0' }}>
             <div className='hint' style={{ fontSize: 12 }}>选择一个候选插入正文：</div>
@@ -425,7 +462,7 @@ export default function AIPanel({ novel, chapter, contentRef, cursorRef, onApply
       </div>
 
       {promptOpen && (
-        <div className='modal-mask' onClick={() => setPromptOpen(false)}>
+        <div className='modal-mask'>
           <div className='modal' style={{ width: 680 }} onClick={(e) => e.stopPropagation()}>
             <div className='modal-head'>
               提示词库
@@ -492,9 +529,9 @@ export default function AIPanel({ novel, chapter, contentRef, cursorRef, onApply
       )}
 
       {editPrompt && (
-        <div className='modal-mask' onClick={() => setEditPrompt(null)}>
-          <div className='modal' style={{ width: 640 }} onClick={(e) => e.stopPropagation()}>
-            <div className='modal-head'>{editPrompt.id ? '编辑提示词' : '新建提示词'}</div>
+          <div className='modal-mask'>
+            <div className='modal' style={{ width: 640 }} onClick={(e) => e.stopPropagation()}>
+              <div className='modal-head'>{editPrompt.id ? '编辑提示词' : '新建提示词'}</div>
             <div className='modal-body'>
               <div className='form-grid'>
                 <div className='form-field'>
@@ -593,9 +630,9 @@ export default function AIPanel({ novel, chapter, contentRef, cursorRef, onApply
 
       {/* 运行提示词：参数表单 */}
       {paramsOpen && runningPrompt && (
-        <div className='modal-mask' onClick={() => setParamsOpen(false)}>
-          <div className='modal' style={{ width: 520 }} onClick={(e) => e.stopPropagation()}>
-            <div className='modal-head'>{runningPrompt.name} · 参数</div>
+          <div className='modal-mask'>
+            <div className='modal' style={{ width: 520 }} onClick={(e) => e.stopPropagation()}>
+              <div className='modal-head'>{runningPrompt.name} · 参数</div>
             <div className='modal-body'>
               {runningPrompt.params.map((p) => (
                 <div className='form-field' key={p.key}>

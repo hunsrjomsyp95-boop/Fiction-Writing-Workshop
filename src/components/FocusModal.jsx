@@ -119,7 +119,7 @@ export default function FocusModal({ novel, chapter, initialContent, onSave, onC
   const currentWords = countChars(text)
 
   return (
-    <div className='focus-modal-mask' onClick={onClose}>
+    <div className='focus-modal-mask'>
       <div className='focus-modal' onClick={(e) => e.stopPropagation()}>
         <div className='focus-header'>
           <div className='focus-timer'>

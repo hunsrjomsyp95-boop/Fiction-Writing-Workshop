@@ -1,5 +1,6 @@
 const services = require('./services')
 const { getProviderById } = require('./ai-providers')
+const memory = require('./ai-memory')
 
 // 规范化 Base URL：去掉结尾斜杠、去掉误填的完整 /chat/completions 路径
 function normalizeBaseUrl(url) {
@@ -56,13 +57,6 @@ async function chat(messages, opts = {}) {
     throw new Error('未配置 API Key，请先在「AI 设置」中填写')
   }
 
-  // Ollama 本地模型：自动启动服务
-  if (cfg.provider === 'ollama') {
-    const ollama = require('./ollama')
-    const ok = await ollama.ensureRunning()
-    if (!ok) throw new Error('Ollama 未安装或启动失败，请先安装 Ollama')
-  }
-
   const url = `${cfg.baseUrl}/chat/completions`
   const body = {
     model: opts.model || cfg.model,
@@ -108,6 +102,82 @@ async function chat(messages, opts = {}) {
   }
 }
 
+async function chatStream(messages, opts = {}) {
+  const cfg = getConfig()
+  if (!cfg.apiKey && !cfg.noApiKey && !opts.allowEmptyKey) {
+    throw new Error('未配置 API Key，请先在「AI 设置」中填写')
+  }
+
+  const url = `${cfg.baseUrl}/chat/completions`
+  const body = {
+    model: opts.model || cfg.model,
+    temperature: opts.temperature !== undefined ? opts.temperature : cfg.temperature,
+    messages,
+    stream: true,
+  }
+  if (opts.maxTokens) body.max_tokens = opts.maxTokens
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), (opts.timeout || 180) * 1000)
+  const headers = { 'Content-Type': 'application/json' }
+  if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let fullContent = ''
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '')
+      let detail = ''
+      try {
+        const errJson = JSON.parse(errText)
+        detail = errJson.error?.message || errJson.message || errText.slice(0, 300)
+      } catch {
+        detail = errText.slice(0, 300)
+      }
+      throw new Error(`API 请求失败 (${res.status}): ${detail}`)
+    }
+
+    const reader = res.body.getReader()
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed === 'data: [DONE]') continue
+        if (!trimmed.startsWith('data: ')) continue
+
+        try {
+          const json = JSON.parse(trimmed.slice(6))
+          const delta = json.choices?.[0]?.delta?.content || ''
+          if (delta) {
+            fullContent += delta
+            if (opts.onChunk) opts.onChunk(delta)
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+    }
+
+    return { content: fullContent }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function testConnection() {
   const cfg = getConfig()
   if (!cfg.baseUrl) throw new Error('未配置 API 地址，请先选择服务商')
@@ -128,7 +198,7 @@ async function testConnection() {
       throw new Error('API Key 权限不足或账户余额不足')
     }
     if (msg.includes('404') || msg.includes('Not Found')) {
-      throw new Error(`接口不存在 (${cfg.baseUrl}/chat/completions)，请检查 API 地址`)
+      throw new Error(`接口不存在 (${cfg.baseUrl}/chat/completions)，请检查 API 地址或模型名称`)
     }
     if (msg.includes('429') || msg.includes('Too Many Requests')) {
       throw new Error('请求过于频繁，请稍后再试')
@@ -141,6 +211,41 @@ async function testConnection() {
     }
     throw new Error(msg)
   }
+}
+
+// 获取缓存的项目上下文
+function getCachedProjectContext(novelId) {
+  return memory.getProjectContext(novelId)
+}
+
+// 获取对话历史
+function getConversationHistory(novelId) {
+  return memory.getConversationHistory(novelId)
+}
+
+// 添加对话到历史
+function addToConversationHistory(novelId, role, content, model = '', tokens = 0) {
+  memory.addToHistory(novelId, role, content, model, tokens)
+}
+
+// 获取格式化的对话历史用于 AI 上下文
+function getHistoryForContext(novelId, maxMessages = 10) {
+  return memory.getHistoryForContext(novelId, maxMessages)
+}
+
+// 清除对话历史
+function clearConversationHistory(novelId) {
+  memory.clearHistory(novelId)
+}
+
+// 清除上下文缓存
+function clearContextCache(novelId) {
+  memory.clearContextCache(novelId)
+}
+
+// 获取缓存统计
+function getCacheStats() {
+  return memory.getCacheStats()
 }
 
 // 错字错词 AI 校对
@@ -183,6 +288,33 @@ async function aiAssistantWithSystem(systemPrompt, prompt, text = '') {
     { temperature: 0.8, maxTokens: 8192 }
   )
   return { content: res.content }
+}
+
+async function aiAssistantStream(prompt, text = '', callbacks = {}) {
+  const messages = [
+    {
+      role: 'system',
+      content: '你是资深的小说创作助手，擅长网文/出版小说的结构、人物、世界观设计，能给出具体可执行的建议。',
+    },
+    { role: 'user', content: prompt + (text ? `\n\n——以下是相关文本——\n${text.slice(0, 500000)}` : '') },
+  ]
+  return await chatStream(messages, {
+    temperature: 0.8,
+    maxTokens: 8192,
+    onChunk: callbacks.onChunk,
+  })
+}
+
+async function aiAssistantWithSystemStream(systemPrompt, prompt, text = '', callbacks = {}) {
+  const messages = [
+    { role: 'system', content: systemPrompt || '你是资深的小说创作助手。' },
+    { role: 'user', content: prompt + (text ? `\n\n——以下是相关文本——\n${text.slice(0, 500000)}` : '') },
+  ]
+  return await chatStream(messages, {
+    temperature: 0.8,
+    maxTokens: 8192,
+    onChunk: callbacks.onChunk,
+  })
 }
 
 // 资料自动分类（本地关键词 + AI 可选）
@@ -281,20 +413,93 @@ async function aiExtractTerms(text) {
   return []
 }
 
+// AI 生成世界地图节点数据
+async function aiGenerateMapNodes(text) {
+  try {
+    const res = await chat(
+      [
+        {
+          role: 'system',
+          content: `你是一位奇幻世界地图设计师。根据给定的地点信息，生成地图节点和连线数据。
+只输出 JSON，不要任何说明文字。
+格式：
+{
+  "nodes": [
+    {"name": "地点名", "icon": "mountain|building|home|waves|tree", "color": "#hex", "note": "简短描述"}
+  ],
+  "edges": [
+    {"from": "地点A", "to": "地点B", "label": "关系"}
+  ]
+}
+规则：
+- icon 选最匹配的：mountain=山/山脉 building=城市/国家 home=村庄/门派 waves=河流/海洋 tree=森林
+- color 用深色系：大陆#f59e0b 城市#22c55e 村庄#ec4899 河流#5ba3ff 森林#14b8a6 山脉#94a3b8
+- 边表示地理相邻或包含关系
+- 最多 15 个节点
+- 如果输入中没有明确的地点信息，根据内容推断可能的地点`,
+        },
+        { role: 'user', content: text.slice(0, 500000) },
+      ],
+      { temperature: 0.4, maxTokens: 2000 }
+    )
+    const raw = res.content || ''
+    let jsonStr = ''
+    // 尝试从 markdown 代码块提取
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
+    if (fenced) {
+      jsonStr = fenced[1].trim()
+    } else {
+      // 尝试匹配 JSON 对象（支持嵌套）
+      const match = raw.match(/\{[\s\S]*\}/)
+      jsonStr = match ? match[0] : ''
+    }
+    if (!jsonStr) {
+      throw new Error('AI 返回的内容无法解析为 JSON，请检查世界设定中是否有地理信息')
+    }
+    let json
+    try {
+      json = JSON.parse(jsonStr)
+    } catch (parseErr) {
+      throw new Error('JSON 解析失败，请检查世界设定中是否有地理信息')
+    }
+    if (!json.nodes?.length) {
+      throw new Error('AI 未返回有效的地点数据，请确保世界设定中有地理条目')
+    }
+    return json
+  } catch (e) {
+    const msg = e.message || '未知错误'
+    if (msg.includes('未配置') || msg.includes('API Key')) {
+      throw new Error('请先在「设置 → AI 设置」中配置 AI 服务商和 API Key')
+    }
+    throw new Error(`AI 生成失败：${msg}`)
+  }
+}
+
 // AI 生成世界地图 SVG
 async function aiGenerateMap(text) {
-  const res = await chat(
-    [
-      {
-        role: 'system',
-        content:
-          '你是一位专业的奇幻世界地图设计师。根据给定的地点信息生成一段 SVG 代码可视化世界地图。要求：1. 只输出一段完整 SVG，不要任何说明文字；2. SVG 尺寸 width="800" height="500"；3. 背景深色 #0f172a，奇幻风格；4. 每个地点用圆形+标签，按地理逻辑分布；5. 用颜色区分地点类型（大陆#f59e0b 国家#6366f1 城市#22c55e 门派#ec4899 秘境#a78bfa 遗迹#94a3b8 战场#ef4444 自然#14b8a6 建筑#60a5fa 其他#94a3b8）；6. 添加边框和图例；7. 文字用 font-family="PingFang SC, Microsoft YaHei, sans-serif"。',
-      },
-      { role: 'user', content: text.slice(0, 500000) },
-    ],
-    { temperature: 0.4, maxTokens: 4000 }
-  )
-  return extractSvg(res.content)
+  try {
+    const res = await chat(
+      [
+        {
+          role: 'system',
+          content:
+            '你是一位专业的奇幻世界地图设计师。根据给定的地点信息生成一段 SVG 代码可视化世界地图。要求：1. 只输出一段完整 SVG，不要任何说明文字；2. SVG 尺寸 width="800" height="500"；3. 背景深色 #0f172a，奇幻风格；4. 每个地点用圆形+标签，按地理逻辑分布；5. 用颜色区分地点类型（大陆#f59e0b 国家#6366f1 城市#22c55e 门派#ec4899 秘境#a78bfa 遗迹#94a3b8 战场#ef4444 自然#14b8a6 建筑#60a5fa 其他#94a3b8）；6. 添加边框和图例；7. 文字用 font-family="PingFang SC, Microsoft YaHei, sans-serif"。',
+        },
+        { role: 'user', content: text.slice(0, 500000) },
+      ],
+      { temperature: 0.4, maxTokens: 4000 }
+    )
+    return extractSvg(res.content)
+  } catch (e) {
+    const msg = e.message || '未知错误'
+    if (msg.includes('未配置') || msg.includes('API Key')) {
+      throw new Error('请先在「设置 → AI 设置」中配置 AI 服务商和 API Key')
+    }
+    if (msg.includes('Ollama') || msg.includes('ollama')) {
+      throw new Error('本地模型启动失败，请确保 Ollama 已安装并运行')
+    }
+    throw new Error(`AI 生成失败：${msg}`)
+  }
 }
 
 function extractSvg(content) {
@@ -400,59 +605,76 @@ async function aiExtractEntities(text) {
     [
       {
         role: 'system',
-        content: `你是一位资深的小说内容分析专家。请分析用户提供的文本，提取其中的关键设定元素，按类别归类输出。
+        content: `你是一位资深的小说内容分析专家，擅长从文本中提取所有有价值的信息。请仔细分析用户提供的文本，尽可能完整地提取其中的所有设定元素。
 
 只返回 JSON，不要任何其他文字。
 输出格式：
 {
   "characters": [
     {
-      "name": "角色名",
-      "role": "主角/重要配角/配角/反派/龙套",
+      "name": "角色名（必填）",
+      "alias": "别名/外号/称号，没有则留空",
+      "role": "主角/重要配角/配角/反派/龙套/未定",
       "gender": "男/女/未知",
-      "age": "年龄或年龄段",
-      "appearance": "外貌描述（50字内）",
-      "personality": "性格特点（50字内）",
-      "background": "背景线索（50字内）"
+      "age": "年龄或年龄段，没有则留空",
+      "appearance": "外貌描述，包括身高、体型、发型、面容、穿着等所有可见特征，越详细越好",
+      "personality": "性格特点，包括优点、缺点、习惯、说话方式、行为模式等",
+      "background": "背景故事，包括出身、经历、动机、目标、秘密等",
+      "relationships": "与其他角色的关系，格式如：张三(师徒)、李四(恋人)、王五(宿敌)",
+      "notes": "其他重要信息，如特殊能力、持有物品、所属势力、口头禅等"
     }
   ],
   "worlds": [
     {
-      "name": "设定名称",
+      "name": "设定名称（必填）",
       "category": "地理/历史/势力组织/魔法修炼体系/政治制度/文化习俗/科技物品/神祇信仰/种族/事件/其他",
-      "content": "设定内容（100字内）"
+      "content": "详细的设定内容，包括规则、特征、历史、现状等，尽可能完整"
     }
   ],
   "items": [
     {
-      "name": "物品/道具/地点名称",
+      "name": "物品/道具/地点名称（必填）",
       "category": "物品/道具/关键地点/武器/防具/丹药/功法秘籍/状态/其他",
-      "description": "描述（80字内）",
+      "description": "详细描述，包括外观、功能、来历、使用条件等",
+      "location": "所在位置或持有者，没有则留空",
       "importance": "普通/重要/稀有/绝世"
     }
   ],
   "events": [
     {
-      "title": "事件名称",
-      "story_time": "故事内时间",
-      "description": "事件描述（80字内）",
-      "location": "发生地点"
+      "title": "事件名称（必填）",
+      "story_time": "故事内时间，如：开元三年春、2024年、上古时期等",
+      "description": "事件的详细描述，包括起因、经过、结果",
+      "location": "发生地点，没有则留空",
+      "status": "进行中/已完成/未来/历史/旁支"
     }
   ],
   "foreshadowings": [
     {
-      "title": "伏笔名称",
+      "title": "伏笔名称（必填）",
       "type": "普通/重要/核心",
-      "setup_desc": "伏笔描述（50字内）"
+      "setup_desc": "伏笔的铺设描述，即在文中如何埋下的",
+      "call_desc": "伏笔的呼应描述，即如何被提及或暗示的，没有则留空",
+      "resolve_desc": "伏笔的回收描述，即如何揭晓的，没有则留空",
+      "status": "计划/已埋/已呼/已回/已废"
     }
   ]
 }
 
-注意：只提取文本中明确出现或强烈暗示的内容；每个字段尽量精简；如果某类没有提取到，返回空数组 []。`,
+提取要求：
+1. 尽可能完整提取，不要遗漏任何有价值的信息
+2. 如果文本中提到了多个名字但没有明确说明是同一人，分别提取
+3. 人物关系要提取所有明确提到的关系
+4. 世界观设定要提取所有提到的规则、体系、地理等
+5. 物品要提取所有提到的道具、武器、地点等
+6. 伏笔要提取所有悬念、暗示、未解之谜
+7. 如果某个字段在文本中没有提到，留空字符串""，不要编造
+8. 如果某类没有提取到，返回空数组 []
+9. 角色名、设定名等必须与原文一致，不要修改`,
       },
       { role: 'user', content: text.slice(0, 500000) },
     ],
-    { temperature: 0.1, maxTokens: 8192 }
+    { temperature: 0.1, maxTokens: 16384 }
   )
 
   // 尝试解析 JSON 对象
@@ -514,10 +736,13 @@ module.exports = {
   getConfig,
   saveConfig,
   chat,
+  chatStream,
   testConnection,
   aiProofread,
   aiAssistant,
   aiAssistantWithSystem,
+  aiAssistantStream,
+  aiAssistantWithSystemStream,
   classifyMaterialAI,
   classifyLocal,
   aiAnalyzeSettings,
@@ -526,6 +751,14 @@ module.exports = {
   aiClassifyTo,
   aiExtractTerms,
   aiGenerateMap,
+  aiGenerateMapNodes,
   aiExtractEntities,
   aiFilterContent,
+  getCachedProjectContext,
+  getConversationHistory,
+  addToConversationHistory,
+  clearConversationHistory,
+  clearContextCache,
+  getCacheStats,
+  getHistoryForContext,
 }

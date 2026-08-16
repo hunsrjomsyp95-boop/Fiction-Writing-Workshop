@@ -262,19 +262,10 @@ export default function SettingsModal({ onClose }) {
   const [aiCfg, setAiCfg] = useState({ provider: 'xiaomi', baseUrl: '', apiKey: '', model: 'mimo', temperature: 0.7 })
   const [aiTesting, setAiTesting] = useState(false)
   const [searchCfg, setSearchCfg] = useState({ provider: 'google', apiKey: '', engineId: '' })
-  // Ollama 状态
-  const [ollamaStatus, setOllamaStatus] = useState({ installed: false, running: false })
-  const [ollamaModels, setOllamaModels] = useState([])
-  const [ollamaPulling, setOllamaPulling] = useState(false)
 
   useEffect(() => {
     window.api.aiGetConfig().then(setAiCfg)
     window.api.searchConfigGet().then(setSearchCfg)
-    // 检测 Ollama 状态
-    window.api.ollamaStatus().then((s) => {
-      setOllamaStatus(s)
-      if (s.running) window.api.ollamaModels().then(setOllamaModels)
-    })
   }, [])
 
   const saveAi = async () => {
@@ -595,11 +586,21 @@ export default function SettingsModal({ onClose }) {
                     value={aiCfg.model}
                     onChange={(e) => setAiCfg({ ...aiCfg, model: e.target.value })}
                   >
-                    {(AI_PROVIDERS.find((p) => p.id === aiCfg.provider)?.models || []).map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} - {m.description}
-                      </option>
-                    ))}
+                    {(() => {
+                      const presetModels = AI_PROVIDERS.find((p) => p.id === aiCfg.provider)?.models || []
+                      const installedModels = aiCfg.provider === 'ollama' ? ollamaModels : []
+                      const allModels = [...presetModels]
+                      for (const im of installedModels) {
+                        if (!allModels.some((m) => m.id === im.id || m.id + ':latest' === im.id)) {
+                          allModels.push({ id: im.id, name: im.id, description: '已安装' })
+                        }
+                      }
+                      return allModels.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} - {m.description}
+                        </option>
+                      ))
+                    })()}
                   </select>
                 </div>
               )}
@@ -642,112 +643,6 @@ export default function SettingsModal({ onClose }) {
                   <div className='hint'>
                     仅保存在本机，不会上传到除所选服务商外的任何地方。
                   </div>
-                </div>
-              )}
-
-              {/* Ollama 本地管理 */}
-              {aiCfg.provider === 'ollama' && (
-                <div className='panel' style={{ padding: 12, marginTop: 8 }}>
-                  <b style={{ fontSize: 13 }}>Ollama 本地模型</b>
-
-                  {/* 状态显示 */}
-                  <div style={{ margin: '8px 0', fontSize: 13 }}>
-                    <div className='row' style={{ gap: 8 }}>
-                      <span className={`badge ${ollamaStatus.installed ? 'green' : 'red'}`}>
-                        {ollamaStatus.installed ? '✓ 已安装' : '✕ 未安装'}
-                      </span>
-                      <span className={`badge ${ollamaStatus.running ? 'green' : 'yellow'}`}>
-                        {ollamaStatus.running ? '✓ 运行中' : '○ 未运行'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* 未安装 → 提示安装 */}
-                  {!ollamaStatus.installed && (
-                    <div style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--text-1)' }}>
-                      <p>请先下载安装 Ollama：</p>
-                      <a href='https://ollama.com/download' target='_blank' rel='noreferrer'
-                        style={{ fontSize: 14, fontWeight: 600 }}>
-                        → ollama.com/download
-                      </a>
-                      <p style={{ marginTop: 4, color: 'var(--text-2)' }}>安装后回到这里，会自动检测到。</p>
-                    </div>
-                  )}
-
-                  {/* 已安装但未运行 → 启动按钮 */}
-                  {ollamaStatus.installed && !ollamaStatus.running && (
-                    <div style={{ marginTop: 8 }}>
-                      <button
-                        className='primary small'
-                        onClick={async () => {
-                          toast('正在启动 Ollama...', 'info')
-                          const res = await window.api.ollamaStart()
-                          if (res.ok) {
-                            setOllamaStatus({ installed: true, running: true })
-                            setOllamaModels(res.models || [])
-                            toast('Ollama 已启动', 'success')
-                          } else {
-                            toast('启动失败，请手动运行 ollama serve', 'error')
-                          }
-                        }}
-                      >
-                        一键启动 Ollama
-                      </button>
-                    </div>
-                  )}
-
-                  {/* 运行中 → 显示模型管理 */}
-                  {ollamaStatus.running && (
-                    <>
-                      <div style={{ margin: '8px 0', fontSize: 13 }}>
-                        <b>已下载的模型：</b>
-                        {ollamaModels.length === 0 ? (
-                          <div className='hint' style={{ margin: '4px 0' }}>暂无模型，请下载一个：</div>
-                        ) : (
-                          <div style={{ margin: '4px 0', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                            {ollamaModels.map((m) => (
-                              <span key={m.id} className='badge green'>{m.id}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 一键下载模型 */}
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                        {[
-                          { id: 'qwen2.5:7b', name: 'Qwen 2.5 7B' },
-                          { id: 'llama3.1:8b', name: 'Llama 3.1 8B' },
-                          { id: 'deepseek-r1:7b', name: 'DeepSeek R1 7B' },
-                        ].map((m) => (
-                          <button
-                            key={m.id}
-                            className='small'
-                            disabled={ollamaPulling || ollamaModels.some((om) => om.id === m.id || om.id === m.id + ':latest')}
-                            onClick={async () => {
-                              setOllamaPulling(true)
-                              toast(`正在下载 ${m.name}，请稍候...`, 'info', 10000)
-                              try {
-                                const res = await window.api.ollamaPull(m.id)
-                                setOllamaModels(res.models || [])
-                                toast(`${m.name} 下载完成`, 'success')
-                              } catch (e) {
-                                toast(`下载失败：${e.message}`, 'error')
-                              } finally {
-                                setOllamaPulling(false)
-                              }
-                            }}
-                          >
-                            {ollamaModels.some((om) => om.id === m.id || om.id === m.id + ':latest') ? '✓ ' : '+ '}
-                            {m.name}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className='hint' style={{ marginTop: 6 }}>
-                        本地运行，数据不上传，无需 API Key。需要至少 8GB 内存。
-                      </div>
-                    </>
-                  )}
                 </div>
               )}
 
@@ -822,8 +717,39 @@ export default function SettingsModal({ onClose }) {
               </div>
               <h2 style={{ fontSize: 20, fontWeight: 700 }}>小说创作工坊</h2>
               <div className='badge accent' style={{ marginTop: 6 }}>
-                版本 1.0.0
+                版本 1.2.0
               </div>
+
+              {/* 下载链接 */}
+              <div
+                className='panel'
+                style={{
+                  marginTop: 16,
+                  padding: '12px 18px',
+                  background: 'var(--bg-3)',
+                  textAlign: 'center',
+                  width: '100%',
+                  maxWidth: 360,
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>最新版本下载</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+                  <div>
+                    夸克网盘：
+                    <a href='https://pan.quark.cn/s/236730563604' target='_blank' rel='noreferrer'>
+                      https://pan.quark.cn/s/236730563604
+                    </a>
+                  </div>
+                  <div>
+                    百度网盘：
+                    <a href='https://pan.baidu.com/s/1H_9154mscNxu8JxmTS0URQ' target='_blank' rel='noreferrer'>
+                      https://pan.baidu.com/s/1H_9154mscNxu8JxmTS0URQ
+                    </a>
+                    <span className='hint'> 提取码: 1234</span>
+                  </div>
+                </div>
+              </div>
+
               <div className='row' style={{ marginTop: 16 }}>
                 <span className='dim'>作者：</span>
                 <b>哔哩哔哩耄耋教你写小说</b>

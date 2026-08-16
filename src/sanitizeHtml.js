@@ -43,3 +43,11 @@ export default function sanitizeHtml(html) {
     ALLOW_DATA_ATTR: false,
   })
 }
+
+export function sanitizeSvg(svg) {
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    ADD_TAGS: ['svg'],
+    ADD_ATTR: ['viewBox', 'xmlns', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'font-family', 'font-size', 'text-anchor', 'cx', 'cy', 'r', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'd', 'transform', 'opacity'],
+  })
+}

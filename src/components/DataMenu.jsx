@@ -99,7 +99,7 @@ export default function DataMenu({ novel, onClose }) {
   }
 
   return (
-    <div className='modal-mask' onClick={onClose}>
+    <div className='modal-mask'>
       <div
         className='modal'
         ref={modalRef}

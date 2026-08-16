@@ -14,7 +14,7 @@ const {
 } = require('./services/chapters')
 const { listVersions, saveVersion, getVersionContent, deleteVersions } = require('./services/versions')
 const { listOutlines, createOutline, updateOutline, deleteOutline } = require('./services/outlines')
-const { listCharacters, createCharacter, updateCharacter, deleteCharacter } = require('./services/characters')
+const { listCharacters, createCharacter, updateCharacter, updateCharactersOrder, deleteCharacter } = require('./services/characters')
 const { listWorlds, listWorldNames, createWorld, updateWorld, deleteWorld } = require('./services/worlds')
 const {
   listMaterials,
@@ -54,6 +54,7 @@ const {
 } = require('./services/timeline')
 const { listRelations, createRelation, updateRelation, deleteRelation } = require('./services/relations')
 const { listItems, createItem, updateItem, deleteItem } = require('./services/items')
+const { listViews, createView, updateView, deleteView, listNodes, createNode, updateNode, deleteNode, listEdges, createEdge, deleteEdge, deleteEdgesByNode } = require('./services/map')
 const {
   listWorldRules,
   listRuleEras,
@@ -108,6 +109,7 @@ module.exports = {
   listCharacters,
   createCharacter,
   updateCharacter,
+  updateCharactersOrder,
   deleteCharacter,
   listWorlds,
   listWorldNames,
@@ -164,6 +166,18 @@ module.exports = {
   createItem,
   updateItem,
   deleteItem,
+  listViews,
+  createView,
+  updateView,
+  deleteView,
+  listNodes,
+  createNode,
+  updateNode,
+  deleteNode,
+  listEdges,
+  createEdge,
+  deleteEdge,
+  deleteEdgesByNode,
   listWorldRules,
   listRuleEras,
   listCustomEras,
