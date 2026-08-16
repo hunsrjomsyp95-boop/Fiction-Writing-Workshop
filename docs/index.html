@@ -2,11 +2,106 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://sql.js.org https://cdn.jsdelivr.net https://unpkg.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sql.js.org https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://localhost:5173 ws://127.0.0.1:5173 https://sql.js.org https://cdn.jsdelivr.net https://unpkg.com blob:;" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>小说创作工坊</title>
-    <script type="module" crossorigin src="./assets/index-C19ueRqN.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-vNb5GySk.css">
+    <style>
+      /* 移动端强制横向显示 */
+      @media screen and (max-width: 768px) {
+        html {
+          /* 强制横向 */
+          writing-mode: horizontal-tb;
+          -webkit-writing-mode: horizontal-tb;
+        }
+        
+        body {
+          /* 防止缩放 */
+          touch-action: manipulation;
+          -webkit-text-size-adjust: 100%;
+          /* 优化滚动 */
+          -webkit-overflow-scrolling: touch;
+          overflow-x: hidden;
+        }
+        
+        /* 强制最小宽度 */
+        #root {
+          min-width: 1024px;
+          width: 100%;
+          overflow-x: auto;
+        }
+        
+        .app {
+          min-width: 1024px;
+        }
+        
+        /* 优化输入框 */
+        input, textarea, select {
+          font-size: 16px !important; /* 防止iOS缩放 */
+        }
+        
+        /* 优化按钮点击 */
+        button, [role="button"] {
+          -webkit-tap-highlight-color: transparent;
+          cursor: pointer;
+        }
+        
+        /* 隐藏移动端组件 */
+        .mobile-layout {
+          display: none !important;
+        }
+        
+        /* 优化侧边栏 */
+        .sidebar, .nav-rail {
+          min-width: 200px;
+        }
+        
+        /* 优化表格滚动 */
+        table, .table-container {
+          overflow-x: auto;
+          display: block;
+        }
+      }
+      
+      /* 横屏优化 */
+      @media screen and (orientation: portrait) and (max-width: 768px) {
+        body::before {
+          content: '请旋转设备为横屏模式';
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0,0,0,0.9);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 18px;
+          z-index: 99999;
+          text-align: center;
+          padding: 20px;
+        }
+        
+        #root {
+          display: none;
+        }
+      }
+      
+      @media screen and (orientation: landscape) and (max-width: 768px) {
+        body::before {
+          display: none;
+        }
+        
+        #root {
+          display: block;
+        }
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-D8-7YpsJ.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BS2bTH1A.css">
   </head>
   <body>
     <div id="root"></div>
