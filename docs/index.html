@@ -9,94 +9,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>小说创作工坊</title>
     <style>
-      /* 移动端强制横向显示 */
+      /* 移动端优化 */
       @media screen and (max-width: 768px) {
-        html {
-          /* 强制横向 */
-          writing-mode: horizontal-tb;
-          -webkit-writing-mode: horizontal-tb;
-        }
-        
         body {
-          /* 防止缩放 */
           touch-action: manipulation;
           -webkit-text-size-adjust: 100%;
-          /* 优化滚动 */
           -webkit-overflow-scrolling: touch;
-          overflow-x: hidden;
         }
         
-        /* 强制最小宽度 */
-        #root {
-          min-width: 1024px;
-          width: 100%;
-          overflow-x: auto;
-        }
-        
-        .app {
-          min-width: 1024px;
-        }
-        
-        /* 优化输入框 */
         input, textarea, select {
-          font-size: 16px !important; /* 防止iOS缩放 */
-        }
-        
-        /* 优化按钮点击 */
-        button, [role="button"] {
-          -webkit-tap-highlight-color: transparent;
-          cursor: pointer;
-        }
-        
-        /* 隐藏移动端组件 */
-        .mobile-layout {
-          display: none !important;
-        }
-        
-        /* 优化侧边栏 */
-        .sidebar, .nav-rail {
-          min-width: 200px;
-        }
-        
-        /* 优化表格滚动 */
-        table, .table-container {
-          overflow-x: auto;
-          display: block;
-        }
-      }
-      
-      /* 横屏优化 */
-      @media screen and (orientation: portrait) and (max-width: 768px) {
-        body::before {
-          content: '请旋转设备为横屏模式';
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0,0,0,0.9);
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 18px;
-          z-index: 99999;
-          text-align: center;
-          padding: 20px;
-        }
-        
-        #root {
-          display: none;
-        }
-      }
-      
-      @media screen and (orientation: landscape) and (max-width: 768px) {
-        body::before {
-          display: none;
-        }
-        
-        #root {
-          display: block;
+          font-size: 16px !important;
         }
       }
     </style>
