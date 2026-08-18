@@ -1,132 +1,62 @@
-﻿import { useState, useEffect, useRef, useCallback, memo } from 'react'
+﻿import { useState, useEffect, useRef, useCallback } from 'react'
 import { marked } from 'marked'
 import sanitizeHtml from '../sanitizeHtml.js'
-import {
-  Clock,
-  Target,
-  ChevronUp,
-  ChevronDown,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelRightClose,
-  PanelRightOpen,
-} from 'lucide-react'
+import { ChevronUp, ChevronDown, Clock, Target } from 'lucide-react'
 import Editor from './Editor.jsx'
-import TypoCheckPanel from './TypoCheckPanel.jsx'
-import SensitiveWordsPanel from './SensitiveWordsPanel.jsx'
-import VersionPanel from './VersionPanel.jsx'
-import StagingPanel from './StagingPanel.jsx'
-import AIPanel from './AIPanel.jsx'
 import SelectionToolbar from './SelectionToolbar.jsx'
 import FocusModal from './FocusModal.jsx'
+import ChapterListPanel from './ChapterListPanel.jsx'
+import RightPanel from './RightPanel.jsx'
+import ChapterContextMenu from './ChapterContextMenu.jsx'
 import { useToast } from '../ToastContext.jsx'
 import { useDialog } from '../Dialog.jsx'
 import { useShortcutRun } from '../shortcuts.jsx'
+import { useTypingTracker } from '../hooks/useTypingTracker.js'
+import { useChapterManager } from '../hooks/useChapterManager.js'
 
 marked.setOptions({ gfm: true, breaks: true })
 
-// 章节列表项组件 - 使用 React.memo 避免无效重渲染
-const ChapterItem = memo(function ChapterItem({
-  ch,
-  isActive,
-  isSelected,
-  isDragging,
-  canMoveUp,
-  canMoveDown,
-  onSelect,
-  onToggleSelect,
-  onMoveUp,
-  onMoveDown,
-  onDelete,
-  onSplit,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
-}) {
-  return (
-    <div
-      className={`tree-item ${isActive ? 'active' : ''} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''}`}
-      draggable={!!onDragStart}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
-      onClick={onSelect}
-    >
-      <input
-        type='checkbox'
-        checked={isSelected}
-        onClick={(e) => e.stopPropagation()}
-        onChange={onToggleSelect}
-        style={{ marginLeft: 4 }}
-      />
-      <div className='row' onClick={(e) => e.stopPropagation()} style={{ gap: 2, flexShrink: 0 }}>
-        <button className='ghost' onClick={onMoveUp} disabled={!canMoveUp}>
-          <ChevronUp size={16} />
-        </button>
-        <button className='ghost' onClick={onMoveDown} disabled={!canMoveDown}>
-          <ChevronDown size={16} />
-        </button>
-      </div>
-      <div className='grow' style={{ overflow: 'hidden' }}>
-        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ch.title}</div>
-        <div className='hint' style={{ fontSize: 11 }}>
-          {ch.word_count}字 · {ch.status}
-        </div>
-      </div>
-      <button className='ghost small' title='分屏编辑' onClick={onSplit} style={{ flexShrink: 0 }}>
-        ⧉
-      </button>
-      <button className='ghost small danger' onClick={onDelete} style={{ flexShrink: 0 }}>
-        ×
-      </button>
-    </div>
-  )
-}, (prev, next) => {
-  return prev.ch === next.ch && prev.isActive === next.isActive && prev.isSelected === next.isSelected &&
-    prev.isDragging === next.isDragging && prev.canMoveUp === next.canMoveUp && prev.canMoveDown === next.canMoveDown &&
-    prev.onDragStart === next.onDragStart && prev.onDragOver === next.onDragOver && prev.onDrop === next.onDrop
-})
-
-function Skeleton({ count = 4 }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className='skeleton-line' style={{ height: 32 }} />
-      ))}
-    </div>
-  )
-}
-
-/**
- * 章节管理视图
- * 
- * 提供完整的章节管理功能，包括：
- * - 章节列表：显示所有章节，支持拖拽排序、多选、批量操作
- * - 编辑器：集成CodeMirror编辑器，支持Markdown语法高亮
- * - 实时预览：Markdown渲染预览，支持同步滚动
- * - AI辅助：集成AI面板，支持续写、改写等
- * - 错字检查：实时错字和敏感词检测
- * - 版本管理：自动保存版本历史，支持对比和恢复
- * - 专注模式：番茄钟、字数目标、全屏写作
- * - 快捷键：丰富的快捷键支持
- * 
- * @param {Object} novel - 小说对象
- * @param {Function} onDirty - 内容变化回调（用于标记未保存状态）
- * @param {Function} onSaving - 保存开始回调
- * @param {Function} onSaved - 保存完成回调
- */
 export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
   const toast = useToast()
   const { prompt, confirm } = useDialog()
-  const [chapters, setChapters] = useState(null)
-  const [current, setCurrent] = useState(null)
-  const [content, setContent] = useState('')
-  const [marks, setMarks] = useState([])
-  const [rightTab, setRightTab] = useState('ai')
-  const [wordCount, setWordCount] = useState(0)
-  const [saving, setSaving] = useState(false)
+
+  const {
+    chapters,
+    setChapters,
+    current,
+    setCurrent,
+    content,
+    setContent,
+    marks,
+    setMarks,
+    wordCount,
+    saving,
+    savedWordCount,
+    selectedIds,
+    setSelectedIds,
+    searchText,
+    setSearchText,
+    sortBy,
+    setSortBy,
+    contentRef,
+    currentRef,
+    chaptersRef,
+    selectChapterRef,
+    loadChapters,
+    doSave,
+    handleChange,
+    selectChapter,
+    deleteChapter: deleteChapterBase,
+    createChapter: createChapterBase,
+    moveChapter,
+    saveNow,
+    saveSnapshot,
+    filteredChapters,
+    sortedChapters,
+  } = useChapterManager(novel, { onDirty, onSaving, onSaved, toast })
+
+  const { typing, streak, dailyGoal, handleTyping } = useTypingTracker(novel.id)
+
   const [caret, setCaret] = useState(null)
   const caretRef = useRef(null)
   const [reading, setReading] = useState(false)
@@ -134,70 +64,29 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
   const [toolbarOpen, setToolbarOpen] = useState(true)
   const [leftOpen, setLeftOpen] = useState(true)
   const [leftW, setLeftW] = useState(240)
-  const [selectedIds, setSelectedIds] = useState(new Set())
-  const [searchText, setSearchText] = useState('')
-  const [sortBy, setSortBy] = useState('order') // order | title
-  const [dragId, setDragId] = useState(null)
   const [rightOpen, setRightOpen] = useState(true)
   const [rightW, setRightW] = useState(340)
+  const [rightTab, setRightTab] = useState('ai')
+  const [dragId, setDragId] = useState(null)
   const [splitChapter, setSplitChapter] = useState(null)
   const [splitContent, setSplitContent] = useState('')
-  const [typing, setTyping] = useState({ today: 0, session: 0, hourly: [] })
-  const [streak, setStreak] = useState(0)
-  const [dailyGoal, setDailyGoal] = useState(0)
   const [focusOpen, setFocusOpen] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
-  const [savedWordCount, setSavedWordCount] = useState(0)
-  const saveTimer = useRef(null)
-  const chaptersRef = useRef(chapters)
-  chaptersRef.current = chapters
-  const contentRef = useRef('')
-  contentRef.current = content
-  const typingPending = useRef(0)
-  const typingTimer = useRef(null)
-  const editorViewRef = useRef(null)
+  const [editorFontSize, setEditorFontSize] = useState(16)
+  const [editorLineHeight, setEditorLineHeight] = useState(1.8)
   const [selection, setSelection] = useState(null)
+  const [ctxMenu, setCtxMenu] = useState(null)
   const leftPanelRef = useRef(null)
   const rightPanelRef = useRef(null)
-
-
-
-
-
-  const typingFlush = useCallback(() => {
-    if (typingPending.current <= 0) return
-    const w = typingPending.current
-    typingPending.current = 0
-    window.api.addTypingWords(novel.id, w).then(setTyping)
-  }, [novel.id])
+  const editorViewRef = useRef(null)
+  const dragOverIdRef = useRef(null)
 
   useEffect(() => {
-    window.api.getTypingStats(novel.id).then(setTyping)
-    window.api.getWritingStreak(novel.id).then(setStreak)
     window.api.getSetting('toolbar_open', '1').then((v) => setToolbarOpen(v !== '0'))
-    window.api.getSetting('daily_goal', '0').then((v) => setDailyGoal(parseInt(v) || 0))
-    return () => {
-      clearTimeout(typingTimer.current)
-      typingFlush()
-    }
-  }, [novel.id, typingFlush])
-
-  const handleTyping = useCallback(
-    (n) => {
-      typingPending.current += n
-      setTyping((t) => ({ ...t, session: t.session + n }))
-      if (!typingTimer.current) {
-        typingTimer.current = setTimeout(() => {
-          typingTimer.current = null
-          typingFlush()
-        }, 3000)
-      }
-    },
-    [typingFlush]
-  )
-
-  const selectChapterRef = useRef(null)
+    window.api.getSetting('editor_font_size', '16').then((v) => setEditorFontSize(Number(v) || 16))
+    window.api.getSetting('editor_line_height', '1.8').then((v) => setEditorLineHeight(Number(v) || 1.8))
+  }, [novel.id])
 
   useEffect(() => {
     const h = (e) => {
@@ -210,74 +99,28 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
     return () => window.removeEventListener('jump-chapter', h)
   }, [chapters])
 
-  const loadChapters = async () => {
-    const list = await window.api.listChapters(novel.id)
-    setChapters(list)
-    if (list.length > 0) {
-      const lastId = await window.api.getSetting(`last_chapter_${novel.id}`, '')
-      const last = lastId ? list.find((c) => c.id === Number(lastId)) : null
-      const ch = last || list[0]
-      setCurrent(ch)
-      setContent(ch.content || '')
-      setWordCount((ch.content || '').replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '').length)
-      setSavedWordCount(ch.word_count || 0)
-      const view = editorViewRef.current
-      if (view) {
-        const cur = view.state.doc.toString()
-        const newContent = ch.content || ''
-        if (cur !== newContent) {
-          view.dispatch({ changes: { from: 0, to: cur.length, insert: newContent } })
-        }
-      }
-    } else {
-      setCurrent(null)
-      setContent('')
-    }
-  }
-
-  useEffect(() => {
-    loadChapters()
-    setSelectedIds(new Set())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [novel.id])
-
-  const doSave = useCallback(
-    async (chapter, text) => {
-      setSaving(true)
-      onSaving?.()
-      try {
-        const updated = await window.api.updateChapter(chapter.id, { content: text })
-        setChapters((list) => list.map((c) => (c.id === updated.id ? updated : c)))
-        setWordCount(updated.word_count)
-        setSavedWordCount(updated.word_count)
-        window.api.setSetting(`last_chapter_${novel.id}`, String(chapter.id))
-        onSaved?.()
-      } catch (e) {
-        toast('保存失败：' + e.message, 'error')
-      } finally {
-        setSaving(false)
-      }
+  const deleteChapter = useCallback(
+    async (ch) => {
+      if (!(await confirm({ title: '删除章节', message: `确认删除「${ch.title}」？版本历史也将删除。`, danger: true })))
+        return
+      await window.api.deleteChapter(ch.id)
+      toast('已删除', 'success')
+      if (current?.id === ch.id) setCurrent(null)
+      loadChapters()
     },
-    [novel.id, onSaving, onSaved, toast]
+    [current?.id, confirm, toast, loadChapters, setCurrent]
   )
 
-  const currentRef = useRef(null)
-  currentRef.current = current
-
-  const handleChange = useCallback(
-    (text) => {
-      const chId = currentRef.current?.id
-      contentRef.current = text
-      setContent(text)
-      onDirty?.()
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-      saveTimer.current = setTimeout(() => {
-        const ch = currentRef.current
-        if (ch && ch.id === chId) doSave(ch, text)
-      }, 1200)
-    },
-    [doSave, onDirty]
-  )
+  const createChapter = useCallback(async () => {
+    const title = await prompt({ title: '章节名称', value: `第${chapters.length + 1} 章` })
+    if (!title) return
+    const ch = await window.api.createChapter(novel.id, { title })
+    setChapters(await window.api.listChapters(novel.id))
+    setCurrent(ch)
+    setContent('')
+    setMarks([])
+    onSaved?.()
+  }, [novel.id, chapters?.length, prompt, setChapters, setCurrent, setContent, setMarks, onSaved])
 
   const handleSelectionChange = useCallback((sel) => {
     setSelection(sel)
@@ -297,14 +140,8 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
         const cp = chaps.find((c) => c.title === name)
         if (cp) {
           if (currentRef.current && currentRef.current.id !== cp.id) {
-            if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
-            doSave(currentRef.current, contentRef.current)
+            selectChapter(cp)
           }
-          currentRef.current = cp
-          setCurrent(cp)
-          setContent(cp.content || '')
-          contentRef.current = cp.content || ''
-          setWordCount((cp.content || '').replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '').length)
           toast(`已跳转到章节：${cp.title}`, 'success')
           return
         }
@@ -320,7 +157,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
         toast('链接跳转失败：' + e.message, 'error')
       }
     },
-    [novel.id, toast]
+    [novel.id, toast, selectChapter, currentRef]
   )
 
   const handleToolbarAction = useCallback(
@@ -369,69 +206,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
     [toast, selection]
   )
 
-  const saveNow = async () => {
-    if (!currentRef.current) return
-    clearTimeout(saveTimer.current)
-    await doSave(currentRef.current, contentRef.current)
-    await window.api.saveVersion(currentRef.current.id, contentRef.current, `自动保存 ${new Date().toLocaleTimeString()}`)
-    toast('已保存并生成版本快照', 'success')
-  }
-
-  const createChapter = async () => {
-    const title = await prompt({ title: '章节名称', value: `第${chapters.length + 1} 章` })
-    if (!title) return
-    const ch = await window.api.createChapter(novel.id, { title })
-    setChapters(await window.api.listChapters(novel.id))
-    setCurrent(ch)
-    setContent('')
-    setMarks([])
-    onSaved?.()
-  }
-
-  const selectChapter = (ch) => {
-    const prev = currentRef.current
-    if (prev && prev.id !== ch.id) {
-      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
-      doSave(prev, contentRef.current)
-    }
-    const newContent = ch.content || ''
-    currentRef.current = ch
-    setCurrent(ch)
-    setContent(newContent)
-    setWordCount(ch.word_count)
-    setSavedWordCount(ch.word_count)
-    setMarks([])
-    setCaret(null)
-    contentRef.current = newContent
-    window.api.setSetting(`last_chapter_${novel.id}`, String(ch.id))
-    const view = editorViewRef.current
-    if (view) {
-      const cur = view.state.doc.toString()
-      if (cur !== newContent) {
-        view.dispatch({ changes: { from: 0, to: cur.length, insert: newContent } })
-      }
-      view.contentDOM.blur()
-    }
-  }
-
-  selectChapterRef.current = selectChapter
-
-  const deleteChapter = async (ch) => {
-    if (!(await confirm({ title: '删除章节', message: `确认删除「${ch.title}」？版本历史也将删除。`, danger: true })))
-      return
-    await window.api.deleteChapter(ch.id)
-    toast('已删除', 'success')
-    if (current?.id === ch.id) setCurrent(null)
-    loadChapters()
-  }
-
-  const saveSnapshot = async () => {
-    if (!currentRef.current) return
-    await window.api.saveVersion(currentRef.current.id, contentRef.current, `快照 ${new Date().toLocaleString()}`)
-    toast('已保存版本快照', 'success')
-  }
-
-  const handleAutoCorrect = async () => {
+  const handleAutoCorrect = useCallback(async () => {
     const text = contentRef.current
     if (!text) return
     const { issues } = await window.api.typoCheck(text)
@@ -442,9 +217,9 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
     const { text: fixed, count } = await window.api.typoApply(text, issues)
     setContent(fixed)
     toast(`已自动纠错${count} 处`, 'success')
-  }
+  }, [contentRef, setContent, toast])
 
-  const handleFormat = async () => {
+  const handleFormat = useCallback(async () => {
     const text = contentRef.current
     if (!text) return
     const { text: formatted, changes } = await window.api.formatText(text)
@@ -454,27 +229,18 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
     }
     setContent(formatted)
     toast(`已自动排版，调整 ${changes} 处`, 'success')
-  }
+  }, [contentRef, setContent, toast])
 
-  const moveChapter = async (id, dir) => {
-    const idx = chapters.findIndex((c) => c.id === id)
-    const target = idx + dir
-    if (target < 0 || target >= chapters.length) return
-    const arr = chapters.map((c) => c.id)
-    ;[arr[idx], arr[target]] = [arr[target], arr[idx]]
-    setChapters(await window.api.reorderChapters(novel.id, arr))
-  }
-
-  const toggleSelectAll = () => {
+  const toggleSelectAll = useCallback(() => {
     if (!chapters) return
     if (selectedIds.size === chapters.length) {
       setSelectedIds(new Set())
     } else {
       setSelectedIds(new Set(chapters.map((c) => c.id)))
     }
-  }
+  }, [chapters, selectedIds, setSelectedIds])
 
-  const handleBatchDelete = async () => {
+  const handleBatchDelete = useCallback(async () => {
     if (selectedIds.size === 0) return
     if (
       !(await confirm({
@@ -492,65 +258,18 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
     }
     toast(`已删除${selectedIds.size} 个章节`, 'success')
     loadChapters()
-  }
+  }, [selectedIds, confirm, current, setSelectedIds, setCurrent, setContent, toast, loadChapters])
 
-  const handleBatchStatus = async (status) => {
-    if (selectedIds.size === 0) return
-    await window.api.batchUpdateChapters([...selectedIds], { status })
-    setSelectedIds(new Set())
-    toast(`已更新${selectedIds.size} 个章节状态为「${status}」`, 'success')
-    loadChapters()
-  }
-
-  useShortcutRun('save_chapter', saveNow)
-  useShortcutRun('new_chapter', createChapter)
-  useShortcutRun('snapshot', saveSnapshot)
-  useShortcutRun('reading_mode', () => setReading((r) => !r))
-  useShortcutRun('focus_mode', () => setFocusOpen(true))
-
-  const leftResizeStart = (e) => {
-    const sx = e.clientX,
-      sw = leftW
-    const mv = (ev) => setLeftW(Math.max(48, Math.min(400, sw + ev.clientX - sx)))
-    const up = () => {
-      document.removeEventListener('mousemove', mv)
-      document.removeEventListener('mouseup', up)
-    }
-    document.addEventListener('mousemove', mv)
-    document.addEventListener('mouseup', up)
-  }
-
-  const rightResizeStart = (e) => {
-    const sx = e.clientX,
-      sw = rightW
-    const mv = (ev) => setRightW(Math.max(120, Math.min(600, sw - (ev.clientX - sx))))
-    const up = () => {
-      document.removeEventListener('mousemove', mv)
-      document.removeEventListener('mouseup', up)
-    }
-    document.addEventListener('mousemove', mv)
-    document.addEventListener('mouseup', up)
-  }
-
-  const filteredChapters = chapters
-    ? chapters.filter((ch) => !searchText || ch.title.toLowerCase().includes(searchText.toLowerCase()))
-    : []
-
-  const sortedChapters = sortBy === 'title'
-    ? filteredChapters.slice().sort((a, b) => a.title.localeCompare(b.title, 'zh'))
-    : filteredChapters
-
-  const realWordCount =
-    current && content !== undefined ? (content || '').replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '').length : null
-  const delta = realWordCount !== null && savedWordCount !== null ? realWordCount - savedWordCount : null
-
-  const currentIdx = chapters ? chapters.findIndex((c) => c.id === current?.id) : -1
-  const prevChapter = currentIdx > 0 ? chapters[currentIdx - 1] : null
-  const nextChapter = currentIdx >= 0 && currentIdx < (chapters?.length || 0) - 1 ? chapters[currentIdx + 1] : null
-
-  const wikiLinksToHtml = (text) => text.replace(/\[\[([^\]]+)\]\]/g, '<span class="wiki-link-inline">$1</span>')
-
-  const dragOverIdRef = useRef(null)
+  const handleBatchStatus = useCallback(
+    async (status) => {
+      if (selectedIds.size === 0) return
+      await window.api.batchUpdateChapters([...selectedIds], { status })
+      setSelectedIds(new Set())
+      toast(`已更新${selectedIds.size} 个章节状态为「${status}」`, 'success')
+      loadChapters()
+    },
+    [selectedIds, setSelectedIds, toast, loadChapters]
+  )
 
   const handleDragStart = useCallback((e, id) => {
     setDragId(id)
@@ -574,7 +293,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
         return next
       })
     },
-    [dragId]
+    [dragId, setChapters]
   )
 
   const handleDrop = useCallback(async () => {
@@ -583,300 +302,154 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
     }
     setDragId(null)
     dragOverIdRef.current = null
-  }, [dragId, novel.id])
+  }, [dragId, novel.id, chaptersRef])
 
   const handleDragEnd = useCallback(() => {
     setDragId(null)
     dragOverIdRef.current = null
   }, [])
 
-  const renderLeft = (ref) => {
-    if (!leftOpen) {
-      return (
-        <div
-          style={{
-            width: 30,
-            flexShrink: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            paddingTop: 8,
-            borderRight: '1px solid var(--border)',
-            background: 'var(--bg-2)',
-          }}
-        >
-          <button className='ghost' onClick={() => setLeftOpen(true)} title='展开章节列表'>
-            <PanelLeftOpen size={18} />
-          </button>
-        </div>
-      )
-    }
-    return (
-      <div ref={ref} style={{ display: 'flex', flexShrink: 0 }}>
-        <div className='sidebar' style={{ width: leftW, display: 'flex', flexDirection: 'column' }}>
-          <div className='list-header' style={{ flexWrap: 'wrap', gap: 4 }}>
-            <button className='ghost' onClick={() => setLeftOpen(false)} title='折叠章节列表'>
-              <PanelLeftClose size={18} />
-            </button>
-            <h3>章节{chapters ? `(${chapters.length})` : ''}</h3>
-            <button className='small primary' onClick={createChapter} title='新建章节'>
-              +
-            </button>
-            <button
-              className='small'
-              onClick={async () => {
-                try {
-                  const ch = await window.api.importDocxChapter(novel.id)
-                  if (ch?.canceled) return
-                  loadChapters()
-                  selectChapter(ch)
-                  toast(`已从 Word 导入「${ch.title}」`, 'success')
-                } catch (e) {
-                  toast(e.message, 'error')
-                }
-              }}
-              title=' Word 文档导入为章节'
-            >
-              导入 Word
-            </button>
-          </div>
-          <div style={{ padding: '2px 6px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 4 }}>
-            <input
-              style={{ flex: 1, fontSize: 12 }}
-              placeholder='搜索章节标题...'
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-            />
-            <select
-              style={{ fontSize: 11, width: 72 }}
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              title='排序方式'
-            >
-              <option value='order'>手动</option>
-              <option value='title'>名称</option>
-            </select>
-          </div>
-          {chapters && chapters.length > 0 && (
-            <div
-              className='row'
-              style={{ padding: '4px 8px', gap: 4, borderBottom: '1px solid var(--border)', background: 'var(--bg-2)' }}
-            >
-              <input
-                type='checkbox'
-                checked={selectedIds.size > 0 && selectedIds.size === chapters.length}
-                onChange={toggleSelectAll}
-                title='全选/全不选'
-              />
-              <span style={{ fontSize: 11, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
-                {selectedIds.size}/{chapters.length}
-              </span>
-              <button className='ghost small' onClick={toggleSelectAll}>
-                {selectedIds.size === chapters.length ? '全不选' : '全部'}
-              </button>
-              <div className='grow' />
-              <button
-                className='ghost small danger'
-                disabled={selectedIds.size === 0}
-                onClick={handleBatchDelete}
-                title='批量删除'
-              >
-                批量删除
-              </button>
-              <select
-                style={{ width: 80, fontSize: 11 }}
-                disabled={selectedIds.size === 0}
-                value=''
-                onChange={(e) => {
-                  if (e.target.value) handleBatchStatus(e.target.value)
-                  e.target.value = ''
-                }}
-              >
-                <option value=''>状态</option>
-                <option value='草稿'>草稿</option>
-                <option value='待修改'>待修改</option>
-                <option value='已完成'>已完成</option>
-              </select>
-            </div>
-          )}
-          <div style={{ flex: 1, overflow: 'auto' }}>
-            {chapters === null ? (
-              <div style={{ padding: 16 }}>
-                <Skeleton count={6} />
-              </div>
-            ) : sortedChapters.length === 0 ? (
-              searchText ? (
-                <div className='empty-state' style={{ padding: 16 }}>
-                  <div className='hint'>未找到匹配的章节</div>
-                </div>
-              ) : (
-                <div className='empty-state' style={{ padding: 16 }}>
-                  <div className='hint'>暂无章节</div>
-                </div>
-              )
-            ) : (
-              sortedChapters.map((ch) => {
-                const fi = chapters.indexOf(ch)
-                return (
-                  <ChapterItem
-                    key={ch.id}
-                    ch={ch}
-                    isActive={current?.id === ch.id}
-                    isSelected={selectedIds.has(ch.id)}
-                    isDragging={dragId === ch.id}
-                    canMoveUp={sortBy === 'order' && fi > 0}
-                    canMoveDown={sortBy === 'order' && fi < chapters.length - 1}
-                    onSelect={() => selectChapter(ch)}
-                    onToggleSelect={() => {
-                      const next = new Set(selectedIds)
-                      if (next.has(ch.id)) next.delete(ch.id)
-                      else next.add(ch.id)
-                      setSelectedIds(next)
-                    }}
-                    onMoveUp={() => moveChapter(ch.id, -1)}
-                    onMoveDown={() => moveChapter(ch.id, 1)}
-                    onDelete={(e) => {
-                      e.stopPropagation()
-                      deleteChapter(ch)
-                    }}
-                    onSplit={(e) => {
-                      e.stopPropagation()
-                      setSplitChapter(ch)
-                      setSplitContent(ch.content || '')
-                    }}
-                    onDragStart={sortBy === 'order' ? (e) => handleDragStart(e, ch.id) : undefined}
-                    onDragOver={sortBy === 'order' ? (e) => handleDragOver(e, ch.id) : undefined}
-                    onDrop={sortBy === 'order' ? handleDrop : undefined}
-                    onDragEnd={sortBy === 'order' ? handleDragEnd : undefined}
-                  />
-                )
-              })
-            )}
-          </div>
-        </div>
-        <div
-          style={{ width: 4, flexShrink: 0, cursor: 'col-resize', background: 'transparent' }}
-          onMouseDown={leftResizeStart}
-        />
-      </div>
-    )
-  }
+  const handleContextMenu = useCallback((e, ch) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCtxMenu({ x: e.clientX, y: e.clientY, ch })
+  }, [])
 
-  const renderRight = (ref) => {
-    if (!rightOpen) {
-      return (
-        <div
-          style={{
-            width: 30,
-            flexShrink: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            paddingTop: 8,
-            borderLeft: '1px solid var(--border)',
-            background: 'var(--bg-2)',
-          }}
-        >
-          <button className='ghost' onClick={() => setRightOpen(true)} title='展开 AI 助手'>
-            <PanelRightOpen size={18} />
-          </button>
-        </div>
-      )
+  useEffect(() => {
+    if (!ctxMenu) return
+    const close = () => setCtxMenu(null)
+    window.addEventListener('click', close)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('scroll', close, true)
     }
-    return (
-      <div ref={ref} style={{ display: 'flex', flexShrink: 0 }}>
-        <div
-          style={{ width: 4, flexShrink: 0, cursor: 'col-resize', background: 'transparent' }}
-          onMouseDown={rightResizeStart}
-        />
-        <div
-          style={{
-            width: rightW,
-            flexShrink: 0,
-            borderLeft: '1px solid var(--border)',
-            background: 'var(--bg-2)',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <div className='tabs'>
-            <div className={`tab ${rightTab === 'ai' ? 'active' : ''}`} onClick={() => setRightTab('ai')}>
-              AI 助手
-            </div>
-            <div className={`tab ${rightTab === 'typo' ? 'active' : ''}`} onClick={() => setRightTab('typo')}>
-              校对
-            </div>
-            <div className={`tab ${rightTab === 'version' ? 'active' : ''}`} onClick={() => setRightTab('version')}>
-              版本对比
-            </div>
-            <div className={`tab ${rightTab === 'sensitive' ? 'active' : ''}`} onClick={() => setRightTab('sensitive')}>
-              敏感词
-            </div>
-            <div className={`tab ${rightTab === 'staging' ? 'active' : ''}`} onClick={() => setRightTab('staging')}>
-              暂存
-            </div>
-            <div className='grow' />
-            <button className='ghost' onClick={() => setRightOpen(false)} title='折叠右侧面板'>
-              <PanelRightClose size={18} />
-            </button>
-          </div>
-          <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-            {rightTab === 'ai' && (
-              <AIPanel
-                novel={novel}
-                chapter={current}
-                contentRef={contentRef}
-                cursorRef={caretRef}
-                onApply={(text) => {
-                  doSave(current, text)
-                }}
-              />
-            )}
-            {rightTab === 'typo' && (
-              <TypoCheckPanel
-                novel={novel}
-                chapter={current}
-                content={content}
-                setMarks={setMarks}
-                onReplace={(text) => {
-                  doSave(current, text)
-                  setMarks([])
-                }}
-              />
-            )}
-            {rightTab === 'sensitive' && (
-              <SensitiveWordsPanel novel={novel} chapter={current} content={content} setMarks={setMarks} />
-            )}
-            {rightTab === 'version' && (
-              <VersionPanel
-                chapter={current}
-                currentContent={content}
-                onRestore={(text) => {
-                  doSave(current, text)
-                  toast('已恢复版本', 'success')
-                }}
-              />
-            )}
-            {rightTab === 'staging' && (
-              <StagingPanel
-                onInsert={(text) => {
-                  if (!editorViewRef.current) return
-                  const view = editorViewRef.current
-                  const pos = view.state.selection.main.head
-                  view.dispatch({ changes: { from: pos, insert: text } })
-                  toast('已插入到光标位置', 'success')
-                }}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-    )
-  }
+  }, [ctxMenu])
+
+  const handleRename = useCallback(
+    async (ch) => {
+      const title = await prompt({ title: '重命名章节', value: ch.title })
+      if (!title || title === ch.title) return
+      const u = await window.api.updateChapter(ch.id, { title })
+      setChapters((l) => l.map((c) => (c.id === u.id ? u : c)))
+      if (current?.id === ch.id) setCurrent(u)
+      toast('已重命名', 'success')
+    },
+    [current?.id, prompt, toast, setChapters, setCurrent]
+  )
+
+  const handleExport = useCallback(
+    async (ch) => {
+      try {
+        await window.api.exportChapterDocx(ch.id)
+        toast(`已导出「${ch.title}」`, 'success')
+      } catch (e) {
+        toast('导出失败：' + e.message, 'error')
+      }
+    },
+    [toast]
+  )
+
+  const handleSummarize = useCallback(
+    async (ch) => {
+      const content = ch.content || ''
+      if (!content.trim()) {
+        toast('章节内容为空', 'info')
+        return
+      }
+      toast('正在生成摘要...', 'info')
+      try {
+        const res = await window.api.aiAssistant(
+          '请用一两句话概括以下章节内容的梗概（不超过80字），直接输出摘要，不要加任何前缀或解释。',
+          content.slice(0, 6000)
+        )
+        const summary = res.content.trim()
+        const u = await window.api.updateChapter(ch.id, { summary })
+        setChapters((l) => l.map((c) => (c.id === u.id ? u : c)))
+        if (current?.id === ch.id) setCurrent(u)
+        toast('摘要已生成', 'success')
+      } catch (e) {
+        toast('AI 摘要失败：' + e.message, 'error')
+      }
+    },
+    [current?.id, toast, setChapters, setCurrent]
+  )
+
+  const leftResizeStart = useCallback((e) => {
+    const sx = e.clientX,
+      sw = leftW
+    const mv = (ev) => setLeftW(Math.max(48, Math.min(400, sw + ev.clientX - sx)))
+    const up = () => {
+      document.removeEventListener('mousemove', mv)
+      document.removeEventListener('mouseup', up)
+    }
+    document.addEventListener('mousemove', mv)
+    document.addEventListener('mouseup', up)
+  }, [leftW])
+
+  const rightResizeStart = useCallback((e) => {
+    const sx = e.clientX,
+      sw = rightW
+    const mv = (ev) => setRightW(Math.max(120, Math.min(600, sw - (ev.clientX - sx))))
+    const up = () => {
+      document.removeEventListener('mousemove', mv)
+      document.removeEventListener('mouseup', up)
+    }
+    document.addEventListener('mousemove', mv)
+    document.addEventListener('mouseup', up)
+  }, [rightW])
+
+  useShortcutRun('save_chapter', saveNow)
+  useShortcutRun('new_chapter', createChapter)
+  useShortcutRun('snapshot', saveSnapshot)
+  useShortcutRun('reading_mode', () => setReading((r) => !r))
+  useShortcutRun('focus_mode', () => setFocusOpen(true))
+
+  const realWordCount =
+    current && content !== undefined ? (content || '').replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '').length : null
+  const delta = realWordCount !== null && savedWordCount !== null ? realWordCount - savedWordCount : null
+
+  const currentIdx = chapters ? chapters.findIndex((c) => c.id === current?.id) : -1
+  const prevChapter = currentIdx > 0 ? chapters[currentIdx - 1] : null
+  const nextChapter = currentIdx >= 0 && currentIdx < (chapters?.length || 0) - 1 ? chapters[currentIdx + 1] : null
+
+  const wikiLinksToHtml = (text) => text.replace(/\[\[([^\]]+)\]\]/g, '<span class="wiki-link-inline">$1</span>')
 
   return (
     <div className='main' style={{ flex: 1 }}>
-      {renderLeft(leftPanelRef)}
+      <ChapterListPanel
+        leftOpen={leftOpen}
+        setLeftOpen={setLeftOpen}
+        leftW={leftW}
+        leftResizeStart={leftResizeStart}
+        chapters={chapters}
+        sortedChapters={sortedChapters}
+        current={current}
+        selectedIds={selectedIds}
+        setSelectedIds={setSelectedIds}
+        searchText={searchText}
+        setSearchText={setSearchText}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
+        dragId={dragId}
+        selectChapter={selectChapter}
+        moveChapter={moveChapter}
+        deleteChapter={deleteChapter}
+        createChapter={createChapter}
+        loadChapters={loadChapters}
+        handleDragStart={handleDragStart}
+        handleDragOver={handleDragOver}
+        handleDrop={handleDrop}
+        handleDragEnd={handleDragEnd}
+        handleContextMenu={handleContextMenu}
+        setSplitChapter={setSplitChapter}
+        setSplitContent={setSplitContent}
+        toggleSelectAll={toggleSelectAll}
+        handleBatchDelete={handleBatchDelete}
+        handleBatchStatus={handleBatchStatus}
+        toast={toast}
+        novel={novel}
+      />
 
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div
@@ -1057,7 +630,10 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
               style={{ fontSize: 11, padding: '2px 6px', flexShrink: 0 }}
               title='用 AI 自动生成摘要'
               onClick={async () => {
-                if (!content.trim()) { toast('章节内容为空', 'info'); return }
+                if (!content.trim()) {
+                  toast('章节内容为空', 'info')
+                  return
+                }
                 toast('正在生成摘要...', 'info')
                 try {
                   const res = await window.api.aiAssistant(
@@ -1096,29 +672,49 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
               <div className='reading-topbar'>
                 <span className='reading-title'>{current?.title || '未命名'}</span>
                 <div className='grow' />
-                <button className='small' onClick={() => setReadingFont((s) => Math.max(14, s - 2))}>A-</button>
+                <button className='small' onClick={() => setReadingFont((s) => Math.max(14, s - 2))}>
+                  A-
+                </button>
                 <span className='reading-fontsize'>{readingFont}px</span>
-                <button className='small' onClick={() => setReadingFont((s) => Math.min(28, s + 2))}>A+</button>
-                <button className='small' onClick={() => setReading((r) => !r)} style={{ marginLeft: 8 }}>退出阅读</button>
+                <button className='small' onClick={() => setReadingFont((s) => Math.min(28, s + 2))}>
+                  A+
+                </button>
+                <button className='small' onClick={() => setReading((r) => !r)} style={{ marginLeft: 8 }}>
+                  退出阅读
+                </button>
               </div>
               <div
                 className='reading-wrap reading-content'
-                style={{ flex: 1, fontSize: readingFont, overflow: 'auto', padding: '28px 48px', maxWidth: 780, margin: '0 auto', width: '100%' }}
+                style={{
+                  flex: 1,
+                  fontSize: readingFont,
+                  overflow: 'auto',
+                  padding: '28px 48px',
+                  maxWidth: 780,
+                  margin: '0 auto',
+                  width: '100%',
+                }}
                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(marked.parse(wikiLinksToHtml(content || ''))) }}
               />
               <div className='reading-nav'>
                 <button
                   className='small'
                   disabled={!prevChapter}
-                  onClick={() => { if (prevChapter) selectChapterRef.current(prevChapter) }}
+                  onClick={() => {
+                    if (prevChapter) selectChapterRef.current(prevChapter)
+                  }}
                 >
                   {prevChapter ? `◀ ${prevChapter.title}` : '无上一章'}
                 </button>
-                <span className='reading-progress'>{chapters ? `${(chapters.findIndex((c) => c.id === current?.id) + 1) || 1} / ${chapters.length}` : ''}</span>
+                <span className='reading-progress'>
+                  {chapters ? `${(chapters.findIndex((c) => c.id === current?.id) + 1) || 1} / ${chapters.length}` : ''}
+                </span>
                 <button
                   className='small'
                   disabled={!nextChapter}
-                  onClick={() => { if (nextChapter) selectChapterRef.current(nextChapter) }}
+                  onClick={() => {
+                    if (nextChapter) selectChapterRef.current(nextChapter)
+                  }}
                 >
                   {nextChapter ? `${nextChapter.title} ▶` : '无下一章'}
                 </button>
@@ -1153,8 +749,26 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
             </div>
           ) : splitChapter ? (
             <div style={{ display: 'flex', flex: 1, height: '100%', minHeight: 0 }}>
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)' }}>
-                <div style={{ padding: '4px 8px', fontSize: 12, background: 'var(--bg-2)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  borderRight: '1px solid var(--border)',
+                }}
+              >
+                <div
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: 12,
+                    background: 'var(--bg-2)',
+                    borderBottom: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
                   <span className='badge accent'>{current?.title || '未命名'}</span>
                   <span className='hint'>左</span>
                 </div>
@@ -1173,11 +787,29 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
                 </div>
               </div>
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ padding: '4px 8px', fontSize: 12, background: 'var(--bg-2)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: 12,
+                    background: 'var(--bg-2)',
+                    borderBottom: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
                   <span className='badge'>{splitChapter.title}</span>
                   <span className='hint'>右</span>
                   <div className='grow' />
-                  <button className='ghost small' onClick={() => { setSplitChapter(null); setSplitContent('') }}>关闭分屏</button>
+                  <button
+                    className='ghost small'
+                    onClick={() => {
+                      setSplitChapter(null)
+                      setSplitContent('')
+                    }}
+                  >
+                    关闭分屏
+                  </button>
                 </div>
                 <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
                   <Editor
@@ -1201,6 +833,8 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
               onTyping={handleTyping}
               onSelectionChange={handleSelectionChange}
               onWikiLink={handleWikiLink}
+              fontSize={editorFontSize}
+              lineHeight={editorLineHeight}
             />
           )}
           {selection && toolbarOpen && (
@@ -1258,7 +892,24 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
         </div>
       </div>
 
-      {renderRight(rightPanelRef)}
+      <RightPanel
+        rightOpen={rightOpen}
+        setRightOpen={setRightOpen}
+        rightW={rightW}
+        rightResizeStart={rightResizeStart}
+        rightTab={rightTab}
+        setRightTab={setRightTab}
+        novel={novel}
+        current={current}
+        contentRef={contentRef}
+        caretRef={caretRef}
+        content={content}
+        marks={marks}
+        setMarks={setMarks}
+        doSave={doSave}
+        toast={toast}
+        editorViewRef={editorViewRef}
+      />
 
       {focusOpen && (
         <FocusModal
@@ -1272,6 +923,15 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
           onClose={() => setFocusOpen(false)}
         />
       )}
+
+      <ChapterContextMenu
+        ctxMenu={ctxMenu}
+        setCtxMenu={setCtxMenu}
+        handleRename={handleRename}
+        handleExport={handleExport}
+        handleSummarize={handleSummarize}
+        deleteChapter={deleteChapter}
+      />
     </div>
   )
 }

@@ -1,3 +1,6 @@
+const fs = require('fs')
+const chardet = require('chardet')
+const iconv = require('iconv-lite')
 const { init, dbPath, replaceDb: _replaceDb } = require('../db')
 
 let db
@@ -6,6 +9,26 @@ const stmtCache = new Map()
 function use() {
   if (!db) db = init()
   return db
+}
+
+function readTextFile(filePath) {
+  const buf = fs.readFileSync(filePath)
+  const detected = chardet.detect(buf)
+  const candidates = detected ? [detected] : []
+  if (!candidates.includes('UTF-8')) candidates.push('UTF-8')
+  if (!candidates.includes('GB18030')) candidates.push('GB18030')
+  for (const enc of candidates) {
+    const norm = enc.toLowerCase().replace(/[^a-z0-9]/g, '')
+    try {
+      if (norm === 'utf8' || norm === 'ascii') {
+        const text = buf.toString('utf-8')
+        if (!text.includes('\ufffd')) return text
+      } else if (iconv.encodingExists(norm)) {
+        return iconv.decode(buf, norm)
+      }
+    } catch {}
+  }
+  return buf.toString('utf-8')
 }
 
 // 获取预编译语句（带缓存）
@@ -71,4 +94,4 @@ function parseStoryTimeValue(t) {
   return { v: 0, has: false }
 }
 
-module.exports = { use, prepare, replaceDb, dbPath, countChars, sanitize, cnToNum, parseStoryTimeValue }
+module.exports = { use, prepare, replaceDb, dbPath, countChars, sanitize, cnToNum, parseStoryTimeValue, readTextFile }

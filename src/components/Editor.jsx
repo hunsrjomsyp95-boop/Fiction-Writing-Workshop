@@ -61,7 +61,7 @@ async function loadCodeMirror() {
  * @param {Object} ref - 转发的ref，用于访问编辑器实例
  */
 const Editor = forwardRef(function Editor(
-  { value, onChange, marks = [], readOnly: _readOnly = false, onCaretChange, onTyping, onSelectionChange, onWikiLink },
+  { value, onChange, marks = [], readOnly: _readOnly = false, onCaretChange, onTyping, onSelectionChange, onWikiLink, fontSize = 16, lineHeight = 1.8 },
   ref
 ) {
   const wrapRef = useRef(null)
@@ -234,6 +234,7 @@ const Editor = forwardRef(function Editor(
           }),
           cm.EditorView.theme({
             '&': { backgroundColor: 'transparent', color: 'var(--text)', height: '100%' },
+            '.cm-content': { fontSize: `${fontSize}px`, lineHeight: String(lineHeight), fontFamily: "'Noto Serif SC', 'SimSun', serif" },
             '.cm-gutters': { backgroundColor: 'var(--bg)', color: 'var(--text-faint)', border: 'none' },
             '.cm-activeLine': { backgroundColor: 'color-mix(in srgb, var(--accent) 7%, transparent)' },
             '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
@@ -307,8 +308,22 @@ const Editor = forwardRef(function Editor(
     if (cur !== (value || '')) {
       typingRef.current.skip++
       viewRef.current.dispatch({ changes: { from: 0, to: cur.length, insert: value || '' } })
+      requestAnimationFrame(() => viewRef.current?.requestMeasure())
     }
   }, [value])
+
+  useEffect(() => {
+    if (!wrapRef.current) return
+    // 使用 requestAnimationFrame 确保 CodeMirror 已完成渲染
+    requestAnimationFrame(() => {
+      if (!wrapRef.current) return
+      const cmContent = wrapRef.current.querySelector('.cm-content')
+      if (cmContent) {
+        cmContent.style.fontSize = `${fontSize}px`
+        cmContent.style.lineHeight = String(lineHeight)
+      }
+    })
+  }, [fontSize, lineHeight, ready])
 
   return <div className='editor-wrap' ref={wrapRef} />
 })

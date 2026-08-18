@@ -3,7 +3,7 @@
   "appName": "novel-studio",
   "webDir": "dist",
   "android": {
-    "allowMixedContent": true,
+    "allowMixedContent": false,
     "backgroundColor": "#ffffffff",
     "buildOptions": {
       "keystorePath": null,

@@ -1,4 +1,4 @@
-const { ipcMain, dialog } = require('electron')
+const { ipcMain, dialog, safeStorage } = require('electron')
 const services = require('./services')
 const typo = require('./typo')
 const ai = require('./ai')
@@ -7,7 +7,7 @@ const format = require('./format')
 const crawl = require('./crawl')
 const path = require('path')
 const fs = require('fs')
-const { sanitize } = require('./services/common')
+const { sanitize, readTextFile } = require('./services/common')
 
 function handle(name, fn) {
   ipcMain.handle(name, async (_e, ...args) => {
@@ -42,12 +42,23 @@ function registerAll(getWin) {
   handle('chapter:reorder', (novelId, ids) => services.reorderChapters(novelId, ids))
   handle('chapter:import:docx', async (novelId) => {
     const res = await dialog.showOpenDialog({
-      title: '导入 Word 文档作为章节',
-      filters: [{ name: 'Word 文档', extensions: ['docx'] }],
+      title: '导入文档作为章节',
+      filters: [
+        { name: 'Word 文档', extensions: ['docx'] },
+        { name: '文本文件', extensions: ['txt', 'md'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
       properties: ['openFile'],
     })
     if (res.canceled || !res.filePaths[0]) return { canceled: true }
-    return services.importDocxAsChapter(novelId, res.filePaths[0])
+    const filePath = res.filePaths[0]
+    const ext = path.extname(filePath).toLowerCase()
+    if (ext === '.txt' || ext === '.md') {
+      const content = readTextFile(filePath)
+      const title = path.basename(filePath, ext)
+      return services.createChapter(novelId, { title, content })
+    }
+    return services.importDocxAsChapter(novelId, filePath)
   })
 
   // 版本
@@ -109,11 +120,14 @@ function registerAll(getWin) {
   handle('material:import', async (novelId) => {
     const res = await dialog.showOpenDialog({
       title: '导入素材文件',
-      filters: [{ name: '文本文件', extensions: ['txt', 'md', 'json'] }],
+      filters: [
+        { name: '文本文件', extensions: ['txt', 'md'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
       properties: ['openFile'],
     })
     if (res.canceled || !res.filePaths[0]) return { canceled: true }
-    const content = fs.readFileSync(res.filePaths[0], 'utf-8')
+    const content = readTextFile(res.filePaths[0])
     const name = path.basename(res.filePaths[0], path.extname(res.filePaths[0]))
     return services.createMaterial(novelId, { title: name, content, source: res.filePaths[0] })
   })
@@ -125,7 +139,7 @@ function registerAll(getWin) {
     const entries = fs.readdirSync(dir, { withFileTypes: true })
     for (const entry of entries) {
       if (entry.isFile() && /\.(md|txt)$/i.test(entry.name)) {
-        const content = fs.readFileSync(path.join(dir, entry.name), 'utf-8')
+        const content = readTextFile(path.join(dir, entry.name))
         const name = path.basename(entry.name, path.extname(entry.name))
         files.push({ name, content })
       }
@@ -176,6 +190,38 @@ function registerAll(getWin) {
   // 设置
   handle('setting:get', (key, def) => services.getSetting(key, def))
   handle('setting:set', (key, value) => services.setSetting(key, value))
+
+  // 加密设置（使用操作系统密钥链）
+  handle('setting:get-encrypted', (key) => {
+    const raw = services.getSetting(key, '')
+    if (!raw) return ''
+    try {
+      if (raw.startsWith('enc:')) {
+        const buf = Buffer.from(raw.slice(4), 'base64')
+        return safeStorage.decryptString(buf)
+      }
+      return raw
+    } catch {
+      return raw
+    }
+  })
+  handle('setting:set-encrypted', (key, value) => {
+    if (!value) {
+      services.setSetting(key, '')
+      return true
+    }
+    try {
+      if (safeStorage.isEncryptionAvailable()) {
+        const encrypted = safeStorage.encryptString(value).toString('base64')
+        services.setSetting(key, 'enc:' + encrypted)
+      } else {
+        services.setSetting(key, value)
+      }
+    } catch {
+      services.setSetting(key, value)
+    }
+    return true
+  })
 
   // 错字检查
   handle('typo:check', (text, opts) => typo.runCheck(text, opts))
@@ -351,9 +397,32 @@ function registerAll(getWin) {
     return services.exportNovel(novelId, res.filePaths[0], format)
   })
   handle('import:novel', async () => {
-    const res = await pickFolder('选择要导入的项目文件夹')
+    const res = await dialog.showOpenDialog({
+      title: '导入项目文件夹（含 project.json 或章节文件）',
+      properties: ['openDirectory'],
+    })
     if (res.canceled || !res.filePaths[0]) return { canceled: true }
     return services.importNovel(res.filePaths[0])
+  })
+  handle('import:chapter-file', async (novelId) => {
+    const res = await dialog.showOpenDialog({
+      title: '导入文件为章节',
+      filters: [
+        { name: '文本文件', extensions: ['txt', 'md'] },
+        { name: 'Word 文档', extensions: ['docx'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+      properties: ['openFile'],
+    })
+    if (res.canceled || !res.filePaths[0]) return { canceled: true }
+    const filePath = res.filePaths[0]
+    const ext = path.extname(filePath).toLowerCase()
+    if (ext === '.docx') {
+      return services.importDocxAsChapter(novelId, filePath)
+    }
+    const content = readTextFile(filePath)
+    const title = path.basename(filePath, ext)
+    return services.createChapter(novelId, { title, content })
   })
   handle('backup:novel', async (novelId) => {
     const res = await pickFolder('选择备份保存位置')

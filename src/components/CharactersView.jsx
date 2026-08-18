@@ -50,16 +50,33 @@ export default function CharactersView({ novel }) {
 
   const currentRef = useRef(null)
   const formRef = useRef(null)
+  const saveTimer = useRef(null)
   currentRef.current = current
   formRef.current = form
+
+  const doSave = useCallback(async (data) => {
+    if (!data || !data.id || !data.name?.trim()) return
+    try {
+      const updated = await window.api.updateCharacter(data.id, data)
+      setList((l) => l.map((c) => (c.id === updated.id ? updated : c)))
+    } catch {
+      // silent fail for auto-save
+    }
+  }, [])
+
+  const scheduleSave = useCallback((data) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => doSave(data), 1200)
+  }, [doSave])
 
   const updateFormField = useCallback((key, value) => {
     setForm((prev) => {
       const next = { ...prev, [key]: value }
       formRef.current = next
+      scheduleSave(next)
       return next
     })
-  }, [])
+  }, [scheduleSave])
 
   const load = useCallback(async () => {
     setList(await window.api.listCharacters(novel.id))
@@ -80,17 +97,23 @@ export default function CharactersView({ novel }) {
   }, [current?.id, novel.id])
 
   const create = useCallback(async () => {
+    const prev = formRef.current
+    if (prev && prev.id && prev.name?.trim()) {
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+      await doSave(prev)
+    }
     const name = await prompt({ title: '人物姓名', value: '新人物' })
     if (!name) return
     const it = await window.api.createCharacter(novel.id, { name })
     setList(await window.api.listCharacters(novel.id))
     setCurrent(it)
     setForm({ ...it })
-  }, [novel.id, prompt])
+  }, [novel.id, prompt, doSave])
 
   const openEdit = useCallback((it) => {
     const prev = formRef.current
     if (prev && prev.id !== it.id && prev.name.trim()) {
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
       window.api.updateCharacter(prev.id, prev).then(() => load())
     }
     currentRef.current = it
@@ -104,6 +127,7 @@ export default function CharactersView({ novel }) {
       toast('姓名不能为空', 'error')
       return
     }
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
     const updated = await window.api.updateCharacter(form.id, form)
     setList(await window.api.listCharacters(novel.id))
     setCurrent(updated)
@@ -276,7 +300,14 @@ export default function CharactersView({ novel }) {
                 <div className='list-header'>
                   <h3>编辑人物</h3>
                   <div className='grow' />
-                  <button className='ghost small' onClick={() => setForm(null)}>
+                  <button className='ghost small' onClick={() => {
+                    const prev = formRef.current
+                    if (prev && prev.id && prev.name?.trim()) {
+                      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+                      doSave(prev)
+                    }
+                    setForm(null)
+                  }}>
                     关闭
                   </button>
                 </div>
@@ -398,7 +429,14 @@ export default function CharactersView({ novel }) {
                     删除
                   </button>
                   <div className='grow' />
-                  <button onClick={() => setForm(null)}>取消</button>
+                  <button onClick={() => {
+                    const prev = formRef.current
+                    if (prev && prev.id && prev.name?.trim()) {
+                      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+                      doSave(prev)
+                    }
+                    setForm(null)
+                  }}>取消</button>
                   <button className='primary' onClick={save}>
                     保存
                   </button>

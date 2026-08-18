@@ -151,6 +151,7 @@ const names = {
   replaceInChapters: 'search:replace',
   exportNovel: 'export:novel',
   importNovel: 'import:novel',
+  importChapterFile: 'import:chapter-file',
   backupNovel: 'backup:novel',
   backupExportDb: 'backup:exportdb',
   backupImportDb: 'backup:importdb',

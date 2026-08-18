@@ -164,7 +164,25 @@ export default function DataMenu({ novel, onClose }) {
           </div>
 
           <div className='panel' style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <b>导入项目</b>
+            <b>导入</b>
+            <div className='row'>
+              <div className='hint grow'>
+                导入 txt/md/docx 文件作为当前小说的新章节。
+              </div>
+              <button
+                className='small primary'
+                disabled={busy}
+                onClick={() =>
+                  wrap(async () => {
+                    const ch = await window.api.importChapterFile(novel.id)
+                    if (ch?.canceled) throw new Error('canceled')
+                    if (ch) toast(`已导入章节「${ch.title}」`, 'success')
+                  })
+                }
+              >
+                导入文件
+              </button>
+            </div>
             <div className='row'>
               <div className='hint grow'>
                 选择之前导出的项目文件夹（含 project.json），或一个纯 Markdown 章节文件夹，作为新项目导入。
@@ -180,7 +198,7 @@ export default function DataMenu({ novel, onClose }) {
                   })
                 }
               >
-                导入
+                导入文件夹
               </button>
             </div>
           </div>

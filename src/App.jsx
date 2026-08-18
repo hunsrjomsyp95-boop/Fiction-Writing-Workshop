@@ -2,7 +2,7 @@
 import { ToastCtx } from './ToastContext.jsx'
 import Home from './components/Home.jsx'
 import Workspace from './components/Workspace.jsx'
-import MobileEditorLayout from './components/MobileEditorLayout.jsx'
+import MobileApp from './components/MobileApp.jsx'
 import LoginView from './components/LoginView.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { DialogProvider } from './Dialog.jsx'
@@ -10,9 +10,9 @@ import { ShortcutProvider } from './shortcuts.jsx'
 import { ThemeProvider } from './themes.jsx'
 import BackgroundCanvas from './BackgroundCanvas.jsx'
 
-// 检测是否是移动端
+// 检测是否是移动端 - 统一使用PC端布局
 function isMobile() {
-  return window.innerWidth <= 768 || /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  return false
 }
 
 export default function App() {
@@ -81,7 +81,7 @@ export default function App() {
     )
   }
 
-  // 移动端使用编辑器布局
+  // 移动端使用App布局
   if (mobile) {
     return (
       <ErrorBoundary>
@@ -91,7 +91,7 @@ export default function App() {
               <BackgroundCanvas />
               <div className='app'>
                 {currentNovel ? (
-                  <MobileEditorLayout
+                  <MobileApp
                     novel={currentNovel}
                     user={user}
                     onExit={() => setCurrentNovel(null)}

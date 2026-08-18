@@ -46,7 +46,7 @@ nsis:
   installerIcon: ""
   uninstallerIcon: ""
   include: "installer.nsh"
-  license: ""
+  license: "LICENSE"
   warningsAsErrors: false
 
 electronLanguages:

@@ -94,7 +94,10 @@ function startAutoBackup() {
         win.webContents.send('backup:event', { ok: true, at, count: res.count })
       }
     } catch (e) {
-      /* silent */
+      console.error('[backup] 自动备份失败:', e.message)
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('backup:event', { ok: false, error: e.message })
+      }
     }
   }
   doBackup()
@@ -124,7 +127,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   })
 

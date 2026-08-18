@@ -1,6 +1,38 @@
 const services = require('./services')
 const { getProviderById } = require('./ai-providers')
 const memory = require('./ai-memory')
+const { safeStorage } = require('electron')
+
+function getEncryptedSetting(key) {
+  const raw = services.getSetting(key, '')
+  if (!raw) return ''
+  try {
+    if (raw.startsWith('enc:')) {
+      const buf = Buffer.from(raw.slice(4), 'base64')
+      return safeStorage.decryptString(buf)
+    }
+    return raw
+  } catch {
+    return raw
+  }
+}
+
+function setEncryptedSetting(key, value) {
+  if (!value) {
+    services.setSetting(key, '')
+    return
+  }
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      const encrypted = safeStorage.encryptString(value).toString('base64')
+      services.setSetting(key, 'enc:' + encrypted)
+    } else {
+      services.setSetting(key, value)
+    }
+  } catch {
+    services.setSetting(key, value)
+  }
+}
 
 // 规范化 Base URL：去掉结尾斜杠、去掉误填的完整 /chat/completions 路径
 function normalizeBaseUrl(url) {
@@ -32,11 +64,13 @@ function getConfig() {
 
   return {
     provider,
+    providerDef,
     baseUrl,
-    apiKey: services.getSetting('ai_api_key', ''),
+    apiKey: getEncryptedSetting('ai_api_key'),
     model,
     temperature: Number(services.getSetting('ai_temperature', '0.7')),
     noApiKey: providerDef.noApiKey || false,
+    headerKey: providerDef.headerKey || '',
   }
 }
 
@@ -45,10 +79,51 @@ function saveConfig(cfg) {
   if (cfg.provider === 'custom') {
     services.setSetting('ai_base_url', normalizeBaseUrl(cfg.baseUrl))
   }
-  services.setSetting('ai_api_key', (cfg.apiKey || '').trim())
+  setEncryptedSetting('ai_api_key', (cfg.apiKey || '').trim())
   services.setSetting('ai_model', (cfg.model || '').trim())
   services.setSetting('ai_temperature', String(Number(cfg.temperature) || 0.7))
   return true
+}
+
+function buildRequest(cfg, messages, opts) {
+  const isAnthropic = cfg.provider === 'anthropic'
+  const url = isAnthropic
+    ? `${cfg.baseUrl}/messages`
+    : `${cfg.baseUrl}/chat/completions`
+
+  const headers = { 'Content-Type': 'application/json' }
+  if (cfg.apiKey) {
+    if (cfg.headerKey) {
+      headers[cfg.headerKey] = cfg.apiKey
+    } else {
+      headers.Authorization = `Bearer ${cfg.apiKey}`
+    }
+  }
+
+  let body
+  if (isAnthropic) {
+    const systemMsg = messages.find((m) => m.role === 'system')
+    const userMsgs = messages.filter((m) => m.role !== 'system')
+    body = {
+      model: opts.model || cfg.model,
+      max_tokens: opts.maxTokens || 4096,
+      messages: userMsgs,
+    }
+    if (systemMsg) body.system = systemMsg.content
+    if (opts.temperature !== undefined) body.temperature = opts.temperature
+    else if (cfg.temperature !== undefined) body.temperature = cfg.temperature
+    if (opts.stream) body.stream = true
+  } else {
+    body = {
+      model: opts.model || cfg.model,
+      temperature: opts.temperature !== undefined ? opts.temperature : cfg.temperature,
+      messages,
+      stream: opts.stream || false,
+    }
+    if (opts.maxTokens) body.max_tokens = opts.maxTokens
+  }
+
+  return { url, headers, body }
 }
 
 async function chat(messages, opts = {}) {
@@ -57,18 +132,9 @@ async function chat(messages, opts = {}) {
     throw new Error('未配置 API Key，请先在「AI 设置」中填写')
   }
 
-  const url = `${cfg.baseUrl}/chat/completions`
-  const body = {
-    model: opts.model || cfg.model,
-    temperature: opts.temperature !== undefined ? opts.temperature : cfg.temperature,
-    messages,
-    stream: opts.stream || false,
-  }
-  if (opts.maxTokens) body.max_tokens = opts.maxTokens
+  const { url, headers, body } = buildRequest(cfg, messages, { ...opts, stream: false })
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), (opts.timeout || 180) * 1000)
-  const headers = { 'Content-Type': 'application/json' }
-  if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -88,15 +154,21 @@ async function chat(messages, opts = {}) {
       throw new Error(`API 请求失败 (${res.status}): ${detail}`)
     }
     const data = await res.json()
-    const content = data.choices?.[0]?.message?.content || ''
-    if (data.usage) {
+    let content = ''
+    if (cfg.provider === 'anthropic') {
+      content = data.content?.[0]?.text || ''
+    } else {
+      content = data.choices?.[0]?.message?.content || ''
+    }
+    const usage = data.usage
+    if (usage) {
       try {
-        services.logAiUsage({ model: data.model || opts.model || cfg.model, ...data.usage })
+        services.logAiUsage({ model: data.model || opts.model || cfg.model, ...usage })
       } catch (e) {
         /* ignore */
       }
     }
-    return { content, usage: data.usage, model: data.model }
+    return { content, usage, model: data.model }
   } finally {
     clearTimeout(timer)
   }
@@ -108,18 +180,9 @@ async function chatStream(messages, opts = {}) {
     throw new Error('未配置 API Key，请先在「AI 设置」中填写')
   }
 
-  const url = `${cfg.baseUrl}/chat/completions`
-  const body = {
-    model: opts.model || cfg.model,
-    temperature: opts.temperature !== undefined ? opts.temperature : cfg.temperature,
-    messages,
-    stream: true,
-  }
-  if (opts.maxTokens) body.max_tokens = opts.maxTokens
+  const { url, headers, body } = buildRequest(cfg, messages, { ...opts, stream: true })
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), (opts.timeout || 180) * 1000)
-  const headers = { 'Content-Type': 'application/json' }
-  if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`
 
   const decoder = new TextDecoder()
   let buffer = ''
@@ -146,6 +209,8 @@ async function chatStream(messages, opts = {}) {
     }
 
     const reader = res.body.getReader()
+    const isAnthropic = cfg.provider === 'anthropic'
+
     for (;;) {
       const { done, value } = await reader.read()
       if (done) break
@@ -156,18 +221,35 @@ async function chatStream(messages, opts = {}) {
 
       for (const line of lines) {
         const trimmed = line.trim()
-        if (!trimmed || trimmed === 'data: [DONE]') continue
-        if (!trimmed.startsWith('data: ')) continue
+        if (!trimmed) continue
 
-        try {
-          const json = JSON.parse(trimmed.slice(6))
-          const delta = json.choices?.[0]?.delta?.content || ''
-          if (delta) {
-            fullContent += delta
-            if (opts.onChunk) opts.onChunk(delta)
+        if (isAnthropic) {
+          if (!trimmed.startsWith('data: ')) continue
+          try {
+            const json = JSON.parse(trimmed.slice(6))
+            if (json.type === 'content_block_delta') {
+              const delta = json.delta?.text || ''
+              if (delta) {
+                fullContent += delta
+                if (opts.onChunk) opts.onChunk(delta)
+              }
+            }
+          } catch {
+            // ignore parse errors
           }
-        } catch {
-          // ignore parse errors
+        } else {
+          if (trimmed === 'data: [DONE]') continue
+          if (!trimmed.startsWith('data: ')) continue
+          try {
+            const json = JSON.parse(trimmed.slice(6))
+            const delta = json.choices?.[0]?.delta?.content || ''
+            if (delta) {
+              fullContent += delta
+              if (opts.onChunk) opts.onChunk(delta)
+            }
+          } catch {
+            // ignore parse errors
+          }
         }
       }
     }
@@ -198,7 +280,8 @@ async function testConnection() {
       throw new Error('API Key 权限不足或账户余额不足')
     }
     if (msg.includes('404') || msg.includes('Not Found')) {
-      throw new Error(`接口不存在 (${cfg.baseUrl}/chat/completions)，请检查 API 地址或模型名称`)
+      const endpoint = cfg.provider === 'anthropic' ? '/messages' : '/chat/completions'
+      throw new Error(`接口不存在 (${cfg.baseUrl}${endpoint})，请检查 API 地址或模型名称`)
     }
     if (msg.includes('429') || msg.includes('Too Many Requests')) {
       throw new Error('请求过于频繁，请稍后再试')

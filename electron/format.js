@@ -31,12 +31,14 @@ function formatText(text) {
 }
 
 function countChanges(original, formatted) {
+  const Diff = require('diff')
+  const diff = Diff.diffChars(original, formatted)
   let changes = 0
-  const maxLen = Math.min(original.length, formatted.length)
-  for (let i = 0; i < maxLen; i++) {
-    if (original[i] !== formatted[i]) changes++
+  for (const part of diff) {
+    if (part.added || part.removed) {
+      changes++
+    }
   }
-  changes += Math.abs(original.length - formatted.length)
   return changes
 }
 

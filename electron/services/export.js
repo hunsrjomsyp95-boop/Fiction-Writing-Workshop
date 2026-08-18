@@ -1,4 +1,4 @@
-const { use, sanitize } = require('./common')
+const { use, sanitize, readTextFile } = require('./common')
 const { createNovel, getNovel } = require('./novels')
 const { createChapter } = require('./chapters')
 const { createOutline } = require('./outlines')
@@ -128,11 +128,32 @@ function exportNovel(novelId, dir, format = 'md') {
   fs.writeFileSync(path.join(base, 'project.json'), JSON.stringify(payload, null, 2), 'utf8')
   return { dir: base, chapters: chapters.length }
 }
-function importNovel(dir) {
+function importNovel(inputPath) {
   const fs = require('fs')
   const path = require('path')
-  // const d = use()
-  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error('无效目录')
+
+  if (!fs.existsSync(inputPath)) throw new Error('路径不存在')
+
+  // 单文件导入：直接把 txt/md 文件作为新项目的一个章节
+  if (fs.statSync(inputPath).isFile()) {
+    const ext = path.extname(inputPath).toLowerCase()
+    if (ext !== '.txt' && ext !== '.md') throw new Error('仅支持 .txt 或 .md 文件')
+    const content = readTextFile(inputPath)
+    const name = path.basename(inputPath, ext)
+    const novelId = createNovel({ name }).id
+    let title = name
+    let chContent = content
+    const m = content.match(/^#\s+(.+)\n/)
+    if (m) {
+      title = m[1]
+      chContent = content.slice(m[0].length)
+    }
+    createChapter(novelId, { title, content: chContent.trim() })
+    return getNovel(novelId)
+  }
+
+  // 文件夹导入
+  const dir = inputPath
   let payload = null
   for (const c of [
     path.join(dir, 'project.json'),
@@ -174,7 +195,7 @@ function importNovel(dir) {
       .readdirSync(dir2)
       .filter((x) => extRe.test(x))
       .sort()) {
-      let text = fs.readFileSync(path.join(dir2, f), 'utf8')
+      let text = readTextFile(path.join(dir2, f))
       let title = f.replace(extRe, '').replace(/^\d{3}-/, '')
       const m = text.match(/^#\s+(.+)\n/)
       if (m) {
