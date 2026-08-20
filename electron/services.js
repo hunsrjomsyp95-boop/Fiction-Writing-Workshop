@@ -75,6 +75,7 @@ const {
   backupNovel,
   autoBackupAll,
 } = require('./services/export')
+const { listSkills, getSkill, importSkill, deleteSkill, setActiveSkill, getActiveSkill, getActiveSkillContext } = require('./services/skills')
 
 module.exports = {
   use,
@@ -198,4 +199,11 @@ module.exports = {
   importNovel,
   backupNovel,
   autoBackupAll,
+  listSkills,
+  getSkill,
+  importSkill,
+  deleteSkill,
+  setActiveSkill,
+  getActiveSkill,
+  getActiveSkillContext,
 }

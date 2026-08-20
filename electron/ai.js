@@ -2,6 +2,17 @@ const services = require('./services')
 const { getProviderById } = require('./ai-providers')
 const memory = require('./ai-memory')
 const { safeStorage } = require('electron')
+const fetch = require('node-fetch')
+const { HttpsProxyAgent } = require('https-proxy-agent')
+
+function getAgent(proxy) {
+  if (!proxy) return undefined
+  try {
+    return new HttpsProxyAgent(proxy)
+  } catch {
+    return undefined
+  }
+}
 
 function getEncryptedSetting(key) {
   const raw = services.getSetting(key, '')
@@ -69,6 +80,7 @@ function getConfig() {
     apiKey: getEncryptedSetting('ai_api_key'),
     model,
     temperature: Number(services.getSetting('ai_temperature', '0.7')),
+    proxy: services.getSetting('ai_proxy', ''),
     noApiKey: providerDef.noApiKey || false,
     headerKey: providerDef.headerKey || '',
   }
@@ -82,6 +94,7 @@ function saveConfig(cfg) {
   setEncryptedSetting('ai_api_key', (cfg.apiKey || '').trim())
   services.setSetting('ai_model', (cfg.model || '').trim())
   services.setSetting('ai_temperature', String(Number(cfg.temperature) || 0.7))
+  services.setSetting('ai_proxy', (cfg.proxy || '').trim())
   return true
 }
 
@@ -132,15 +145,30 @@ async function chat(messages, opts = {}) {
     throw new Error('未配置 API Key，请先在「AI 设置」中填写')
   }
 
+  if (!opts.skipSkill) {
+    const skillCtx = services.getActiveSkillContext()
+    if (skillCtx) {
+      const sysIdx = messages.findIndex(m => m.role === 'system')
+      if (sysIdx >= 0) {
+        messages = [...messages]
+        messages[sysIdx] = { ...messages[sysIdx], content: messages[sysIdx].content + '\n\n---\n\n# 参考知识\n\n' + skillCtx }
+      } else {
+        messages = [{ role: 'system', content: '参考知识：\n\n' + skillCtx }, ...messages]
+      }
+    }
+  }
+
   const { url, headers, body } = buildRequest(cfg, messages, { ...opts, stream: false })
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), (opts.timeout || 180) * 1000)
+  const agent = getAgent(cfg.proxy)
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
       signal: controller.signal,
+      ...(agent && { agent }),
     })
     if (!res.ok) {
       const errText = await res.text().catch(() => '')
@@ -180,9 +208,23 @@ async function chatStream(messages, opts = {}) {
     throw new Error('未配置 API Key，请先在「AI 设置」中填写')
   }
 
+  if (!opts.skipSkill) {
+    const skillCtx = services.getActiveSkillContext()
+    if (skillCtx) {
+      const sysIdx = messages.findIndex(m => m.role === 'system')
+      if (sysIdx >= 0) {
+        messages = [...messages]
+        messages[sysIdx] = { ...messages[sysIdx], content: messages[sysIdx].content + '\n\n---\n\n# 参考知识\n\n' + skillCtx }
+      } else {
+        messages = [{ role: 'system', content: '参考知识：\n\n' + skillCtx }, ...messages]
+      }
+    }
+  }
+
   const { url, headers, body } = buildRequest(cfg, messages, { ...opts, stream: true })
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), (opts.timeout || 180) * 1000)
+  const agent = getAgent(cfg.proxy)
 
   const decoder = new TextDecoder()
   let buffer = ''
@@ -194,6 +236,7 @@ async function chatStream(messages, opts = {}) {
       headers,
       body: JSON.stringify(body),
       signal: controller.signal,
+      ...(agent && { agent }),
     })
 
     if (!res.ok) {
@@ -282,6 +325,9 @@ async function testConnection() {
     if (msg.includes('404') || msg.includes('Not Found')) {
       const endpoint = cfg.provider === 'anthropic' ? '/messages' : '/chat/completions'
       throw new Error(`接口不存在 (${cfg.baseUrl}${endpoint})，请检查 API 地址或模型名称`)
+    }
+    if (msg.includes('405') || msg.includes('Not Allowed')) {
+      throw new Error(`请求方法不被允许 (405)，可能是网络代理拦截了请求。请检查网络环境（手机热点可能有限制）`)
     }
     if (msg.includes('429') || msg.includes('Too Many Requests')) {
       throw new Error('请求过于频繁，请稍后再试')
@@ -683,12 +729,7 @@ async function aiAnalyzeSettings(text) {
 }
 
 // AI 实体提取：从任意文本中提取人物/世界观/物品/年表事件/伏笔
-async function aiExtractEntities(text) {
-  const res = await chat(
-    [
-      {
-        role: 'system',
-        content: `你是一位资深的小说内容分析专家，擅长从文本中提取所有有价值的信息。请仔细分析用户提供的文本，尽可能完整地提取其中的所有设定元素。
+const EXTRACT_SYSTEM = `你是一位资深的小说内容分析专家，擅长从文本中提取所有有价值的信息。请仔细分析用户提供的文本，尽可能完整地提取其中的所有设定元素。
 
 只返回 JSON，不要任何其他文字。
 输出格式：
@@ -753,19 +794,29 @@ async function aiExtractEntities(text) {
 6. 伏笔要提取所有悬念、暗示、未解之谜
 7. 如果某个字段在文本中没有提到，留空字符串""，不要编造
 8. 如果某类没有提取到，返回空数组 []
-9. 角色名、设定名等必须与原文一致，不要修改`,
-      },
-      { role: 'user', content: text.slice(0, 500000) },
-    ],
-    { temperature: 0.1, maxTokens: 16384 }
-  )
+9. 角色名、设定名等必须与原文一致，不要修改`
 
-  // 尝试解析 JSON 对象
+const EMPTY_RESULT = { characters: [], worlds: [], items: [], events: [], foreshadowings: [] }
+
+function splitText(text, chunkSize) {
+  if (text.length <= chunkSize) return [text]
+  const chunks = []
+  let pos = 0
+  while (pos < text.length) {
+    let end = Math.min(pos + chunkSize, text.length)
+    if (end < text.length) {
+      const newline = text.lastIndexOf('\n', end)
+      if (newline > pos + chunkSize * 0.5) end = newline + 1
+    }
+    chunks.push(text.slice(pos, end))
+    pos = end
+  }
+  return chunks
+}
+
+function parseExtractJson(raw) {
+  const cleaned = raw.replace(/```json/g, '').replace(/```/g, '').trim()
   try {
-    const cleaned = res.content
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
-      .trim()
     const obj = JSON.parse(cleaned)
     if (obj && typeof obj === 'object') {
       return {
@@ -776,20 +827,53 @@ async function aiExtractEntities(text) {
         foreshadowings: Array.isArray(obj.foreshadowings) ? obj.foreshadowings.filter((f) => f.title) : [],
       }
     }
-  } catch (e) {
-    /* ignore */
-  }
+  } catch {}
+  return null
+}
 
-  // 兜底：尝试数组形式（旧格式兼容）
-  const arr = parseAIList(res.content)
-  if (arr.length) {
-    return {
-      items: arr
-        .filter((i) => i.title || i.name)
-        .map((i) => ({ name: i.name || i.title, description: i.content || i.description || '' })),
+function mergeResults(target, source) {
+  for (const key of ['characters', 'worlds', 'items', 'events', 'foreshadowings']) {
+    if (!source[key]) continue
+    const nameKey = key === 'characters' || key === 'worlds' || key === 'items' ? 'name' : 'title'
+    const existing = new Set(target[key].map((i) => i[nameKey]))
+    for (const item of source[key]) {
+      if (item[nameKey] && !existing.has(item[nameKey])) {
+        target[key].push(item)
+        existing.add(item[nameKey])
+      }
     }
   }
-  return { characters: [], worlds: [], items: [], events: [], foreshadowings: [] }
+}
+
+async function aiExtractEntities(text) {
+  const CHUNK_SIZE = 25000
+  if (text.length <= CHUNK_SIZE) {
+    const res = await chat(
+      [{ role: 'system', content: EXTRACT_SYSTEM }, { role: 'user', content: text }],
+      { temperature: 0.1, maxTokens: 16384, timeout: 300 }
+    )
+    const parsed = parseExtractJson(res.content)
+    if (parsed) return parsed
+    const arr = parseAIList(res.content)
+    if (arr.length) return { ...EMPTY_RESULT, items: arr.filter((i) => i.title || i.name).map((i) => ({ name: i.name || i.title, description: i.content || i.description || '' })) }
+    return EMPTY_RESULT
+  }
+
+  const chunks = splitText(text, CHUNK_SIZE)
+  const result = { ...EMPTY_RESULT }
+  for (const chunk of chunks) {
+    try {
+      const res = await chat(
+        [{ role: 'system', content: EXTRACT_SYSTEM }, { role: 'user', content: chunk }],
+        { temperature: 0.1, maxTokens: 16384, timeout: 300 }
+      )
+      const parsed = parseExtractJson(res.content)
+      if (parsed) mergeResults(result, parsed)
+    } catch (e) {
+      // 单段失败继续下一段
+    }
+  }
+  return result
 }
 
 async function aiFilterContent(content, topic) {

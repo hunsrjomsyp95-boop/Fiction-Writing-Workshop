@@ -25,7 +25,7 @@ const AI_PROVIDERS = [
 
 export default function AISettings() {
   const toast = useToast()
-  const [aiCfg, setAiCfg] = useState({ provider: 'xiaomi', baseUrl: '', apiKey: '', model: 'mimo', temperature: 0.7 })
+  const [aiCfg, setAiCfg] = useState({ provider: 'xiaomi', baseUrl: '', apiKey: '', model: 'mimo', temperature: 0.7, proxy: '' })
   const [searchCfg, setSearchCfg] = useState({ provider: 'google', apiKey: '', engineId: '' })
   const [aiTesting, setAiTesting] = useState(false)
 
@@ -109,6 +109,12 @@ export default function AISettings() {
         <label>温度：{aiCfg.temperature}</label>
         <input type='range' min='0' max='2' step='0.1' value={aiCfg.temperature} onChange={(e) => setAiCfg({ ...aiCfg, temperature: Number(e.target.value) })} />
         <div className='hint'>0 = 精确，1 = 平衡，2 = 创造</div>
+      </div>
+
+      <div className='form-field'>
+        <label>代理地址（可选）</label>
+        <input value={aiCfg.proxy || ''} onChange={(e) => setAiCfg({ ...aiCfg, proxy: e.target.value })} placeholder='http://127.0.0.1:7890 或 socks5://127.0.0.1:1080' />
+        <div className='hint'>手机热点等网络无法连接时，可配置代理。留空则不使用代理。</div>
       </div>
 
       <div className='panel' style={{ padding: 10, marginTop: 8, fontSize: 12 }}>

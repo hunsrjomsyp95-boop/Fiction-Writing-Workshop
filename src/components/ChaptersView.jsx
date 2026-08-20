@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { marked } from 'marked'
 import sanitizeHtml from '../sanitizeHtml.js'
 import { ChevronUp, ChevronDown, Clock, Target } from 'lucide-react'
@@ -98,6 +98,17 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
     window.addEventListener('jump-chapter', h)
     return () => window.removeEventListener('jump-chapter', h)
   }, [chapters])
+
+  useEffect(() => {
+    const h = async () => {
+      const cur = currentRef.current
+      if (!cur) return
+      const fresh = await window.api.getChapter(cur.id)
+      if (fresh) selectChapterRef.current(fresh)
+    }
+    window.addEventListener('reload-chapter', h)
+    return () => window.removeEventListener('reload-chapter', h)
+  }, [])
 
   const deleteChapter = useCallback(
     async (ch) => {

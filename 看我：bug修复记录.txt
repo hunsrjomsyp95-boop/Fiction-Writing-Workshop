@@ -366,3 +366,44 @@ npx electron-rebuild -f -w better-sqlite3
 
 关键教训：打包不同架构版本后，node_modules 里的原生模块会被覆盖。打包完成后必须重新 rebuild 恢复为开发环境的架构。建议在打包脚本中自动处理，或打包后手动执行 rebuild。
 
+
+Bug：全局替换后编辑器内容不刷新（v1.3.2 修复）
+症状：使用「全局替换」功能，提示"已替换 X 处，涉及 X 个章节"，但编辑器里显示的内容没有变化。
+根因：replaceInChapters 正确更新了数据库，但 SearchModal 替换成功后只显示 toast，没有通知编辑器刷新当前章节内容。编辑器里的章节数据是内存中的旧对象，不会自动同步数据库。
+
+排查过程：
+1. 检查 electron/services/search.js 的 replaceInChapters → 数据库更新逻辑正确
+2. 检查 SearchModal.jsx 的 doReplace → 只调用了 toast，没有触发刷新
+3. 检查 Workspace.jsx → SearchModal 只传了 onJump，没有 onReplace 回调
+4. 检查 ChaptersView.jsx 的 selectChapter → 从 ch.content 读取，但 ch 对象是旧的
+
+修复（3 个文件）：
+
+// SearchModal.jsx — 新增 onReplace 回调
+export default function SearchModal({ novel, onClose, onJump, onReplace }) {
+  // ...
+  const res = await window.api.replaceInChapters(novel.id, find, replace)
+  toast(`已替换 ${res.total} 处，涉及 ${res.affected} 个章节`, 'success')
+  if (onReplace) onReplace()  // 新增
+}
+
+// Workspace.jsx — 新增 reloadChapter 函数并传给 SearchModal
+const reloadChapter = () => {
+  window.dispatchEvent(new CustomEvent('reload-chapter'))
+}
+<SearchModal ... onReplace={reloadChapter} />
+
+// ChaptersView.jsx — 监听 reload-chapter 事件，从数据库重新加载当前章节
+useEffect(() => {
+  const h = async () => {
+    const cur = currentRef.current
+    if (!cur) return
+    const fresh = await window.api.getChapter(cur.id)
+    if (fresh) selectChapterRef.current(fresh)
+  }
+  window.addEventListener('reload-chapter', h)
+  return () => window.removeEventListener('reload-chapter', h)
+}, [])
+
+关键教训：数据库更新后，内存中的对象不会自动同步。任何修改数据库的操作，如果需要在 UI 上即时反映，必须在操作完成后主动刷新 UI 状态。
+

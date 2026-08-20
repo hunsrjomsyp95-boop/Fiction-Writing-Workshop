@@ -8,7 +8,7 @@ export default function AboutTab() {
       </div>
       <h2 style={{ fontSize: 20, fontWeight: 700 }}>小说创作工坊</h2>
       <div className='badge accent' style={{ marginTop: 6 }}>
-        版本 1.3.1
+        版本 1.3.2
       </div>
 
       <div

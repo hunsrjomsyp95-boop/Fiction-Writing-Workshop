@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Globe } from 'lucide-react'
 import { useToast } from '../ToastContext.jsx'
 import { useDialog } from '../Dialog.jsx'
@@ -170,15 +170,19 @@ export default function AIPanel({ novel, chapter, contentRef, cursorRef, onApply
     try {
       const p = `请基于我的行文风格续写下一段，保持叙事连贯。
 
+续写前先理解：上文想让读者感受到什么？续写是为了延续这个意图。
+
 【续写要求】
 1. 直接输出内容，不要加任何前缀或解释
 2. 用身体动作呈现情绪，不要说"他感到..."
-3. 对话要口语化，可以吞字、改口
+3. 对话要口语化，可以吞字、改口、说不完
 4. 一句不超过两个逗号
 5. 不要用"不是...而是..."等解释句式
 6. 不要在段落结尾用环境描写收束情绪
 7. 信任读者，不要解释两次
-8. 每段至少一个具体的物理动作或感官输入`
+8. 每段至少一个具体的物理动作或感官输入
+9. 句子长短交替。紧张时短句连发，舒缓时拉长
+10. 情绪要混合，不要单一`
       const res = await window.api.aiAssistant(p, fullCtx)
       setMsgs((m) => [...m, { role: 'assistant', content: res.content }])
     } catch (e) {
@@ -198,14 +202,18 @@ export default function AIPanel({ novel, chapter, contentRef, cursorRef, onApply
     try {
       const p = `请基于我的行文风格续写下一段，保持叙事连贯。
 
+续写前先理解：上文想让读者感受到什么？续写是为了延续这个意图。
+
 【续写要求】
 1. 直接输出内容，不要加任何前缀或解释
 2. 用身体动作呈现情绪，不要说"他感到..."
-3. 对话要口语化，可以吞字、改口
+3. 对话要口语化，可以吞字、改口、说不完
 4. 一句不超过两个逗号
 5. 不要用"不是...而是..."等解释句式
 6. 不要在段落结尾用环境描写收束情绪
-7. 信任读者，不要解释两次`
+7. 信任读者，不要解释两次
+8. 句子长短交替，制造呼吸感
+9. 情绪要混合，不要单一`
       const results = await Promise.all([
         window.api.aiAssistant(p, fullCtx),
         window.api.aiAssistant(p, fullCtx),

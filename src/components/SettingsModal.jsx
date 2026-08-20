@@ -2,6 +2,7 @@
 import ThemeSettings from './ThemeSettings.jsx'
 import EditorSettings from './EditorSettings.jsx'
 import AISettings from './AISettings.jsx'
+import SkillsPanel from './SkillsPanel.jsx'
 import AboutTab from './AboutTab.jsx'
 import SponsorTab from './SponsorTab.jsx'
 
@@ -23,6 +24,9 @@ export default function SettingsModal({ onClose }) {
             <div className={`tab ${tab === 'ai' ? 'active' : ''}`} onClick={() => setTab('ai')}>
               AI 设置
             </div>
+            <div className={`tab ${tab === 'skills' ? 'active' : ''}`} onClick={() => setTab('skills')}>
+              Skill
+            </div>
             <div className={`tab ${tab === 'about' ? 'active' : ''}`} onClick={() => setTab('about')}>
               关于
             </div>
@@ -39,6 +43,7 @@ export default function SettingsModal({ onClose }) {
           {tab === 'theme' && <ThemeSettings />}
           {tab === 'editor' && <EditorSettings />}
           {tab === 'ai' && <AISettings />}
+          {tab === 'skills' && <SkillsPanel />}
           {tab === 'about' && <AboutTab />}
           {tab === 'sponsor' && <SponsorTab />}
         </div>

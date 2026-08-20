@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import {
   FileText,
   Bot,
@@ -158,6 +158,10 @@ export default function Workspace({ novel, user, onExit, onLock }) {
     window.dispatchEvent(new CustomEvent('jump-chapter', { detail: { chapterId } }))
   }
 
+  const reloadChapter = () => {
+    window.dispatchEvent(new CustomEvent('reload-chapter'))
+  }
+
   return (
     <div className='app' role='application' aria-label='小说创作工坊'>
       <header className='topbar' role='banner'>
@@ -297,7 +301,7 @@ export default function Workspace({ novel, user, onExit, onLock }) {
         </main>
       </div>
 
-      {searchOpen && <SearchModal novel={novelMeta} onClose={() => setSearchOpen(false)} onJump={jumpToChapter} />}
+      {searchOpen && <SearchModal novel={novelMeta} onClose={() => setSearchOpen(false)} onJump={jumpToChapter} onReplace={reloadChapter} />}
       {dataMenuOpen && <DataMenu novel={novelMeta} onClose={() => setDataMenuOpen(false)} />}
       {accountOpen && <AccountModal user={user} onClose={() => setAccountOpen(false)} onLock={onLock} />}
       {shortcutOpen && <ShortcutModal onClose={() => setShortcutOpen(false)} />}

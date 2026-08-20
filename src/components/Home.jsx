@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { BookOpen } from 'lucide-react'
 import { useDialog } from '../Dialog.jsx'
 
@@ -165,7 +165,7 @@ export default function Home({ onOpen, toast }) {
         )}
 
         <div style={{ textAlign: 'center', marginTop: 32, fontSize: 11, color: 'var(--text-faint)', opacity: 0.6 }}>
-          v1.3.0 · 免费创作工具
+          v1.3.2 · 免费创作工具
         </div>
       </div>
     </div>

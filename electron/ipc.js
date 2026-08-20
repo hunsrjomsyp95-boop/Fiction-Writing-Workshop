@@ -302,6 +302,21 @@ function registerAll(getWin) {
   handle('ai:cache-stats', () => ai.getCacheStats())
   handle('ai:history-context', (novelId, max) => ai.getHistoryForContext(novelId, max))
 
+  // Skills
+  handle('skill:list', () => services.listSkills())
+  handle('skill:get', (id) => services.getSkill(id))
+  handle('skill:import', async () => {
+    const res = await dialog.showOpenDialog({
+      title: '选择Skill文件夹',
+      properties: ['openDirectory'],
+    })
+    if (res.canceled || !res.filePaths[0]) return { canceled: true }
+    return services.importSkill(res.filePaths[0])
+  })
+  handle('skill:delete', (id) => services.deleteSkill(id))
+  handle('skill:set-active', (id, active) => services.setActiveSkill(id, active))
+  handle('skill:get-active', () => services.getActiveSkill())
+
   // 联网搜索
   handle('search:web', (query, count) => search.webSearch(query, count))
   handle('search:config:get', () => search.getSearchConfig())

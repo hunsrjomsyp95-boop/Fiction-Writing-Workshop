@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import {
   FileText,
   Bot,
@@ -16,6 +16,24 @@ import {
 } from 'lucide-react'
 
 const CHANGES = [
+  {
+    ver: '1.3.2',
+    date: '2026-08-19',
+    items: [
+      'AI提示词全面优化：去AI味、续写、润色、改写、扩写、人物对话、严格编辑等',
+      '内置提示词库12个模板升级：极速起稿、卷级大纲、单章正文、伏笔设计、爽点节奏等',
+      '修复全局替换后编辑器内容不刷新的bug',
+    ],
+  },
+  {
+    ver: '1.3.1',
+    date: '2026-08-19',
+    items: [
+      'Skill导入功能：支持导入SKILL.md+markdown文件夹，AI自动参考',
+      'Skill管理界面：设置→Skill，导入/删除/激活/预览',
+      'AI实体提取长文本分段处理，不再超时失败',
+    ],
+  },
   {
     ver: '1.3.0',
     date: '2026-08-18',

@@ -1,8 +1,24 @@
 # 更新日志
 
-## [1.3.1] - 2026-08-19
+## [1.3.2] - 2026-08-19
+
+### 变更
+- AI提示词全面优化：去AI味、续写、润色、改写、扩写、人物对话、严格编辑等
+- 内置提示词库12个模板升级：极速起稿、卷级大纲、单章正文、伏笔设计、爽点节奏等
 
 ### 修复
+- 修复全局替换后编辑器内容不刷新的bug
+
+## [1.3.1] - 2026-08-19
+
+### 新增
+- Skill导入功能：支持导入包含SKILL.md和markdown文件的skill文件夹
+- Skill管理界面：设置→Skill标签，支持导入/删除/激活/预览
+- AI对话自动参考激活的skill内容（附加到系统提示词）
+- AI实体提取支持长文本分段处理（超过25,000字自动拆分）
+
+### 修复
+- 修复AI实体提取长文本超时失败（This operation was aborted）
 - 修复 Anthropic Claude API 协议不匹配：使用 `x-api-key` 头和 `/messages` 端点替代通用 OpenAI 格式
 - 修复 Electron sandbox 安全设置：启用 `sandbox: true` 符合官方安全建议
 - 修复 API Key 明文存储：使用操作系统密钥链（safeStorage）加密存储
@@ -12,7 +28,7 @@
 - 修复 `@capacitor/cli` 错误放在 dependencies：移至 devDependencies
 - 修复 README 文档不准确：重写文档，移除虚假功能声明
 
-### 新增
+### 变更
 - MIT LICENSE 文件
 - GitHub Actions CI 流水线（lint + 单元测试 + 构建）
 - 组件拆分：ChaptersView、SettingsModal、AIPanel 拆分为多个子组件和 hooks

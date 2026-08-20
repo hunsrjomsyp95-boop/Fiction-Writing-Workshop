@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useToast } from '../ToastContext.jsx'
 import { useDialog } from '../Dialog.jsx'
 
@@ -13,7 +13,7 @@ const KIND_LABELS = {
   item: '物品',
 }
 
-export default function SearchModal({ novel, onClose, onJump }) {
+export default function SearchModal({ novel, onClose, onJump, onReplace }) {
   const toast = useToast()
   const { confirm } = useDialog()
   const [mode, setMode] = useState('search')
@@ -59,7 +59,8 @@ export default function SearchModal({ novel, onClose, onJump }) {
     setReplacing(true)
     try {
       const res = await window.api.replaceInChapters(novel.id, find, replace)
-      toast(`已替换${res.total} 处，涉及 ${res.affected} 个章节`, 'success')
+      toast(`已替换 ${res.total} 处，涉及 ${res.affected} 个章节`, 'success')
+      if (onReplace) onReplace()
     } catch (e) {
       toast('替换失败：' + e.message, 'error')
     } finally {
