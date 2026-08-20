@@ -17,6 +17,14 @@ import {
 
 const CHANGES = [
   {
+    ver: '1.3.3',
+    date: '2026-08-20',
+    items: [
+      'AI代理配置：设置新增代理地址，支持HTTP/SOCKS5代理',
+      '修复打包版启动报错 Cannot find module undici',
+    ],
+  },
+  {
     ver: '1.3.2',
     date: '2026-08-19',
     items: [
