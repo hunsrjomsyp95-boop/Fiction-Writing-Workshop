@@ -17,6 +17,13 @@ import {
 
 const CHANGES = [
   {
+    ver: '1.3.4',
+    date: '2026-08-20',
+    items: [
+      '测试自动更新功能',
+    ],
+  },
+  {
     ver: '1.3.3',
     date: '2026-08-20',
     items: [
