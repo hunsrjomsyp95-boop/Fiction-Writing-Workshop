@@ -204,3 +204,11 @@ contextBridge.exposeInMainWorld('aiStream', {
     return () => ipcRenderer.removeListener('ai:stream:error', handler)
   },
 })
+
+contextBridge.exposeInMainWorld('updateListener', {
+  onUpdate: (cb) => {
+    const handler = (_e, data) => cb(data)
+    ipcRenderer.on('update:event', handler)
+    return () => ipcRenderer.removeListener('update:event', handler)
+  },
+})

@@ -32,6 +32,7 @@ function checkForUpdates() {
 
 autoUpdater.on('update-available', (info) => {
   if (!win) return
+  win.webContents.send('update:event', { status: 'available', version: info.version })
   dialog
     .showMessageBox(win, {
       type: 'info',
@@ -43,7 +44,10 @@ autoUpdater.on('update-available', (info) => {
     })
     .then(({ response }) => {
       if (response === 0) {
+        win.webContents.send('update:event', { status: 'downloading', progress: 0 })
         autoUpdater.downloadUpdate()
+      } else {
+        win.webContents.send('update:event', { status: 'dismissed' })
       }
     })
 })
@@ -51,12 +55,18 @@ autoUpdater.on('update-available', (info) => {
 autoUpdater.on('download-progress', (progress) => {
   if (win) {
     win.setProgressBar(progress.percent / 100)
+    win.webContents.send('update:event', {
+      status: 'downloading',
+      progress: Math.round(progress.percent),
+      speed: Math.round(progress.bytesPerSecond / 1024),
+    })
   }
 })
 
 autoUpdater.on('update-downloaded', () => {
   if (win) {
-    win.setProgressBar(-1) // 移除进度条
+    win.setProgressBar(-1)
+    win.webContents.send('update:event', { status: 'downloaded' })
     dialog
       .showMessageBox(win, {
         type: 'info',
@@ -73,8 +83,10 @@ autoUpdater.on('update-downloaded', () => {
   }
 })
 
-autoUpdater.on('error', () => {
-  // 静默处理更新错误
+autoUpdater.on('error', (err) => {
+  if (win) {
+    win.webContents.send('update:event', { status: 'error', message: err.message })
+  }
 })
 
 function startAutoBackup() {

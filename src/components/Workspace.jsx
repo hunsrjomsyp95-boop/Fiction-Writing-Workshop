@@ -87,6 +87,7 @@ export default function Workspace({ novel, user, onExit, onLock }) {
   const [tab, setTab] = useState('chapters')
   const [novelMeta, setNovelMeta] = useState(novel)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [updateStatus, setUpdateStatus] = useState(null)
   const [dataMenuOpen, setDataMenuOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const [showOnboard, setShowOnboard] = useState(false)
@@ -111,6 +112,16 @@ export default function Workspace({ novel, user, onExit, onLock }) {
   useShortcutRun('tab_timeline', () => setTab('timeline'))
   useShortcutRun('tab_materials', () => setTab('materials'))
   useShortcutRun('tab_stats', () => setTab('stats'))
+
+  useEffect(() => {
+    if (!window.updateListener) return
+    return window.updateListener.onUpdate((data) => {
+      setUpdateStatus(data)
+      if (data.status === 'error') {
+        toast('更新失败：' + (data.message || '未知错误'), 'error')
+      }
+    })
+  }, [])
   useShortcutRun('tab_extract', () => setTab('extract'))
   useShortcutRun('tab_mindmap', () => setTab('mindmap'))
 
@@ -164,6 +175,23 @@ export default function Workspace({ novel, user, onExit, onLock }) {
 
   return (
     <div className='app' role='application' aria-label='小说创作工坊'>
+      {updateStatus && updateStatus.status === 'downloading' && (
+        <div style={{
+          background: 'var(--accent)',
+          color: '#fff',
+          padding: '4px 16px',
+          fontSize: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <RotateCw size={12} style={{ animation: 'spin 1s linear infinite' }} />
+          正在下载更新... {updateStatus.progress}% {updateStatus.speed ? `(${updateStatus.speed} KB/s)` : ''}
+          <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.3)', borderRadius: 2 }}>
+            <div style={{ width: `${updateStatus.progress}%`, height: '100%', background: '#fff', borderRadius: 2, transition: 'width 0.3s' }} />
+          </div>
+        </div>
+      )}
       <header className='topbar' role='banner'>
         <div
           className='title'
