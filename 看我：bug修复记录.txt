@@ -407,3 +407,148 @@ useEffect(() => {
 
 关键教训：数据库更新后，内存中的对象不会自动同步。任何修改数据库的操作，如果需要在 UI 上即时反映，必须在操作完成后主动刷新 UI 状态。
 
+
+Bug：人物设定编辑不自动保存（v1.3.0 修复）
+症状：编辑人物卡片后点击新建或切换人物，之前编辑的内容直接消失。
+
+修复（CharactersView.jsx）：
+- 新增 saveTimer ref 和 doSave/scheduleSave 函数
+- updateFormField 中调用 scheduleSave(next) 实现编辑后1.2秒自动保存
+- create 新建人物前先保存当前编辑中的表单
+- openEdit 切换人物时清除旧定时器再保存
+- "关闭"/"取消"按钮也会先保存再关闭面板
+
+// 自动保存逻辑
+const scheduleSave = useCallback((data) => {
+  if (saveTimer.current) clearTimeout(saveTimer.current)
+  saveTimer.current = setTimeout(() => doSave(data), 1200)
+}, [doSave])
+
+关键教训：受控组件的自动保存需要 debounce，避免频繁写入；切换/新建前先保存当前数据。
+
+
+Bug：导入文档后编辑器无法向下滚动（v1.3.0 修复）
+症状：导入 Word 文档或切换章节后，编辑器只能在上面编辑，无法向下滚动。
+
+根因：.editor-wrap 和 .cm-scroller 都设置了 overflow: auto，形成嵌套滚动容器冲突。
+
+修复：
+1. index.css — 移除 .editor-wrap 的 overflow: auto
+2. Editor.jsx — value effect 中 dispatch 后调用 requestMeasure() 强制重新计算布局
+3. ChaptersView.jsx — selectChapter 和 loadChapters 中 dispatch 后同样调用 requestMeasure()
+
+关键教训：CodeMirror 自身的 .cm-scroller 处理滚动，外层容器不应再设 overflow: auto；切换内容后需要 requestMeasure() 刷新布局。
+
+
+Bug：GBK编码文件导入乱码（v1.3.0 修复）
+症状：导入 GBK/GB2312 编码的 txt 文件显示乱码。
+
+根因：文件读取硬编码 fs.readFileSync(path, 'utf-8')，遇到非UTF-8编码就会乱码。
+
+修复：
+1. 安装 chardet（编码检测）和 iconv-lite（编码转换）
+2. 新增 readTextFile(filePath) 函数：自动检测文件编码，按正确编码读取
+3. 资料导入和章节导入全部改用 readTextFile
+
+// readTextFile 核心逻辑
+function readTextFile(filePath) {
+  const buf = fs.readFileSync(filePath)
+  const detected = chardet.detect(buf)
+  const candidates = detected ? [detected] : []
+  if (!candidates.includes('UTF-8')) candidates.push('UTF-8')
+  if (!candidates.includes('GB18030')) candidates.push('GB18030')
+  for (const enc of candidates) {
+    const norm = enc.toLowerCase().replace(/[^a-z0-9]/g, '')
+    try {
+      if (norm === 'utf8' || norm === 'ascii') {
+        const text = buf.toString('utf-8')
+        if (!text.includes('\ufffd')) return text
+      } else if (iconv.encodingExists(norm)) {
+        return iconv.decode(buf, norm)
+      }
+    } catch {}
+  }
+  return buf.toString('utf-8')
+}
+
+关键教训：中文文件编码不统一，必须自动检测；chardet + iconv-lite 是可靠的组合。
+
+
+Bug：文件导入对话框不显示文件（v1.3.0 修复）
+症状：导入对话框打开后看不到 txt/docx 文件。
+
+根因：openFile 和 openDirectory 同时存在时 Windows 文件夹选择器不显示文件。
+
+修复：分离为两个按钮——
+- "导入文件"：用 openFile，支持选 txt/md/docx，导入为当前小说的新章节
+- "导入文件夹"：用 openDirectory，导入项目备份
+
+关键教训：Electron 的 showOpenDialog 中 openFile 和 openDirectory 不能混用。
+
+
+Bug：AI实体提取长文本超时（v1.3.1 修复）
+症状：输入大量文本进行AI提取时显示"提取失败：This operation was aborted"。
+
+根因：chat 函数默认超时180秒，长文本 AI 处理时间不够。
+
+修复（ai.js）：
+- 文本超过25,000字时自动按段落拆分
+- 每段独立调用 AI 提取，每段300秒超时
+- 合并结果，按名称自动去重
+- 单段失败不影响其他段
+
+关键教训：大文本处理需要分段策略，避免单次请求超时。
+
+
+Bug：Skill导入功能实现（v1.3.1 新增）
+需求：支持导入包含 SKILL.md 和 markdown 文件的 skill 文件夹，AI 对话时自动参考。
+
+实现：
+1. electron/services/skills.js — Skill 数据库服务（增删查、激活/停用）
+2. src/components/SkillsPanel.jsx — Skill 管理 UI（导入/删除/激活/预览）
+3. SettingsModal.jsx — 新增"Skill"标签页
+4. ai.js — chat 和 chatStream 自动附加激活的 skill 内容到系统提示词
+
+关键教训：Skill 内容应该作为系统提示词的扩展注入，而不是替换。
+
+
+Bug：打包版启动报错 Cannot find module 'undici'（v1.3.3 修复）
+症状：打包后的安装版启动时报错 Cannot find module 'undici'。
+
+根因：undici 是 Node.js 内置模块，但在 Electron 打包后不可直接 require。
+
+修复：
+1. 安装 node-fetch 和 https-proxy-agent
+2. ai.js 改用 require('node-fetch') 和 require('https-proxy-agent')
+3. 同时实现代理配置功能
+
+关键教训：Electron 打包后不能直接 require Node.js 内置模块（如 undici），需要用 npm 包替代。
+
+
+Bug：AI代理配置（v1.3.3 新增）
+需求：手机热点等受限网络无法连接 AI API，需要代理支持。
+
+实现：
+1. AISettings.jsx — 新增代理地址输入框
+2. ai.js — 使用 https-proxy-agent 创建代理 agent，传入 fetch 的 agent 参数
+3. 代理设置保存到数据库，支持 HTTP 和 SOCKS5 代理
+
+关键教训：node-fetch 支持 agent 参数，可以配合 https-proxy-agent 实现代理。
+
+
+Bug：GitHub Releases 自动更新配置
+需求：实现应用内自动检查更新并下载安装。
+
+配置：
+1. electron-builder.yml 已配置 GitHub 仓库信息
+2. electron/main.js 集成 electron-updater
+3. 启动30秒后自动检查 GitHub Releases
+4. 发现新版本弹窗提示下载，下载完成后退出时自动安装
+
+发布流程：
+1. 改版本号（package.json）
+2. 提交代码并打 tag：git add -A; git commit -m "v1.x.x"; git tag v1.x.x; git push; git push origin v1.x.x
+3. 打包并发布：$env:GH_TOKEN="token"; npm run build; npx electron-builder --win --x64 --publish always
+
+关键教训：发布前必须先 push tag，否则 electron-builder 会报422错误；打包 ia32 后需要 electron-rebuild 恢复开发环境。
+
