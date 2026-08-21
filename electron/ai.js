@@ -2,8 +2,13 @@ const services = require('./services')
 const { getProviderById } = require('./ai-providers')
 const memory = require('./ai-memory')
 const { safeStorage } = require('electron')
-const fetch = require('node-fetch')
 const { HttpsProxyAgent } = require('https-proxy-agent')
+
+let nodeFetch = null
+function getFetch() {
+  if (!nodeFetch) nodeFetch = require('node-fetch')
+  return nodeFetch
+}
 
 function getAgent(proxy) {
   if (!proxy) return undefined
@@ -162,8 +167,9 @@ async function chat(messages, opts = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), (opts.timeout || 180) * 1000)
   const agent = getAgent(cfg.proxy)
+  const fetchFn = getFetch()
   try {
-    const res = await fetch(url, {
+    const res = await fetchFn(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -225,13 +231,13 @@ async function chatStream(messages, opts = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), (opts.timeout || 180) * 1000)
   const agent = getAgent(cfg.proxy)
+  const fetchFn = getFetch()
 
-  const decoder = new TextDecoder()
   let buffer = ''
   let fullContent = ''
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchFn(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -251,14 +257,11 @@ async function chatStream(messages, opts = {}) {
       throw new Error(`API 请求失败 (${res.status}): ${detail}`)
     }
 
-    const reader = res.body.getReader()
     const isAnthropic = cfg.provider === 'anthropic'
+    const stream = res.body
 
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
+    for await (const chunk of stream) {
+      buffer += chunk.toString()
       const lines = buffer.split('\n')
       buffer = lines.pop() || ''
 

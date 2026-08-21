@@ -174,6 +174,7 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
   const handleToolbarAction = useCallback(
     async (action, text) => {
       if (!text) return
+      const sel = selection
       try {
         switch (action) {
           case 'create_setting': {
@@ -195,18 +196,30 @@ export default function ChaptersView({ novel, onDirty, onSaving, onSaved }) {
           }
           case 'polish': {
             const v = editorViewRef.current
-            if (!v) break
+            if (!v || !sel) break
+            toast('正在润色...', 'info')
             const res = await window.api.aiAssistantWithSystem(
-              '你是资深小说润色专家',
-              '请润色这段文字，改进表达但保留原意，只返回润色后的文本',
+              '你是资深小说润色专家。直接输出润色后的文本，不要解释。',
+              `请润色这段文字，重点提升画面感、对话质量和动作描写。
+
+润色前先理解原文的意图——作者想让读者感受到什么？用更有冲击力的方式达成同样的意图。
+
+【润色重点】
+1. 画面感：把抽象描述换成具体的视觉细节
+2. 对话：删掉废话台词，保留有潜台词的对话
+3. 动作：用精准的动词替代模糊表达
+4. 节奏：紧张时短句连发，舒缓时拉长
+5. 删减：砍掉解释性文字、冗余修饰
+6. 直接输出修改后的全文，不要解释`,
               text
             )
             const polished = res?.content || res?.text || res || text
             v.dispatch({
-              changes: { from: selection?.from ?? 0, to: selection?.to ?? 0, insert: polished },
+              changes: { from: sel.from, to: sel.to, insert: polished },
               scrollIntoView: true,
             })
             v.focus()
+            toast('润色完成', 'success')
             break
           }
         }
