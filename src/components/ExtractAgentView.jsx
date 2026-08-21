@@ -108,58 +108,161 @@ export default function ExtractAgentView({ novel }) {
     }
     let count = 0
     const errors = []
+
+    const [existingChars, existingWorlds, existingItems, existingEvents, existingFsh] = await Promise.all([
+      window.api.listCharacters(novel.id),
+      window.api.listWorlds(novel.id),
+      window.api.listItems(novel.id),
+      window.api.listTimeline(novel.id),
+      window.api.listForeshadowings(novel.id),
+    ])
+
+    const findByName = (list, name) => {
+      const n = (name || '').trim()
+      return list.find(item => (item.name || '').trim() === n || (item.alias || '').trim() === n || (item.title || '').trim() === n)
+    }
+
+    const mergeText = (oldVal, newVal) => {
+      const o = (oldVal || '').trim()
+      const n = (newVal || '').trim()
+      if (!o) return n
+      if (!n) return o
+      if (o === n) return o
+      if (o.includes(n)) return o
+      if (n.includes(o)) return n
+      return o + '，' + n
+    }
+
+    const mergeFields = (existing, newData) => {
+      const merged = { ...existing }
+      const textFields = ['appearance', 'personality', 'background', 'relationships', 'notes', 'description', 'content', 'setup_desc', 'call_desc', 'resolve_desc']
+      for (const [key, val] of Object.entries(newData)) {
+        if (val === undefined || val === null || val === '') continue
+        if (textFields.includes(key)) {
+          merged[key] = mergeText(existing[key], val)
+        } else if (!existing[key] || existing[key] === '未定' || existing[key] === '配角') {
+          merged[key] = val
+        }
+      }
+      return merged
+    }
+
     for (const { cat, item } of allItems) {
       try {
         switch (cat) {
-          case 'characters':
-            await window.api.createCharacter(novel.id, {
-              name: item.name || item.title || '未命名',
-              alias: item.alias || '',
-              role: item.role || '配角',
-              gender: item.gender || '',
-              age: item.age || '',
-              appearance: item.appearance || '',
-              personality: item.personality || '',
-              background: item.background || '',
-              relationships: item.relationships || '',
-              notes: item.notes || '',
-            })
+          case 'characters': {
+            const name = item.name || item.title || '未命名'
+            const existing = findByName(existingChars, name)
+            if (existing) {
+              await window.api.updateCharacter(existing.id, mergeFields(existing, {
+                alias: item.alias,
+                role: item.role,
+                gender: item.gender,
+                age: item.age,
+                appearance: item.appearance,
+                personality: item.personality,
+                background: item.background,
+                relationships: item.relationships,
+                notes: item.notes,
+              }))
+            } else {
+              await window.api.createCharacter(novel.id, {
+                name,
+                alias: item.alias || '',
+                role: item.role || '配角',
+                gender: item.gender || '',
+                age: item.age || '',
+                appearance: item.appearance || '',
+                personality: item.personality || '',
+                background: item.background || '',
+                relationships: item.relationships || '',
+                notes: item.notes || '',
+              })
+            }
             break
-          case 'worlds':
-            await window.api.createWorld(novel.id, {
-              name: item.name || item.title || '未命名世界观',
-              category: item.category || '其他',
-              content: item.content || '',
-            })
+          }
+          case 'worlds': {
+            const name = item.name || item.title || '未命名世界观'
+            const existing = findByName(existingWorlds, name)
+            if (existing) {
+              await window.api.updateWorld(existing.id, mergeFields(existing, {
+                category: item.category,
+                content: item.content,
+              }))
+            } else {
+              await window.api.createWorld(novel.id, {
+                name,
+                category: item.category || '其他',
+                content: item.content || '',
+              })
+            }
             break
-          case 'items':
-            await window.api.createItem(novel.id, {
-              name: item.name || item.title || '未命名物品',
-              category: item.category || '物品',
-              description: item.description || '',
-              location: item.location || '',
-              importance: item.importance || '普通',
-            })
+          }
+          case 'items': {
+            const name = item.name || item.title || '未命名物品'
+            const existing = findByName(existingItems, name)
+            if (existing) {
+              await window.api.updateItem(existing.id, mergeFields(existing, {
+                category: item.category,
+                description: item.description,
+                location: item.location,
+                importance: item.importance,
+              }))
+            } else {
+              await window.api.createItem(novel.id, {
+                name,
+                category: item.category || '物品',
+                description: item.description || '',
+                location: item.location || '',
+                importance: item.importance || '普通',
+              })
+            }
             break
-          case 'events':
-            await window.api.createTimelineEvent(novel.id, {
-              title: item.title || item.name || '未命名事件',
-              story_time: item.story_time || '',
-              description: item.description || '',
-              location: item.location || '',
-              status: item.status || '进行中',
-            })
+          }
+          case 'events': {
+            const title = item.title || item.name || '未命名事件'
+            const existing = findByName(existingEvents, title)
+            if (existing) {
+              await window.api.updateTimelineEvent(existing.id, mergeFields(existing, {
+                story_time: item.story_time,
+                description: item.description,
+                location: item.location,
+                status: item.status,
+              }))
+            } else {
+              await window.api.createTimelineEvent(novel.id, {
+                title,
+                story_time: item.story_time || '',
+                description: item.description || '',
+                location: item.location || '',
+                status: item.status || '进行中',
+              })
+            }
             break
-          case 'foreshadowings':
-            await window.api.createForeshadowing(novel.id, {
-              title: item.title || item.name || '未命名伏笔',
-              type: item.type || '普通',
-              setup_desc: item.setup_desc || '',
-              call_desc: item.call_desc || '',
-              resolve_desc: item.resolve_desc || '',
-              status: item.status || '计划',
-            })
+          }
+          case 'foreshadowings': {
+            const title = item.title || item.name || '未命名伏笔'
+            const existing = findByName(existingFsh, title)
+            if (existing) {
+              await window.api.updateForeshadowing(existing.id, mergeFields(existing, {
+                type: item.type,
+                setup_desc: item.setup_desc,
+                call_desc: item.call_desc,
+                resolve_desc: item.resolve_desc,
+                status: item.status,
+              }))
+            } else {
+              await window.api.createForeshadowing(novel.id, {
+                title,
+                type: item.type || '普通',
+                setup_desc: item.setup_desc || '',
+                call_desc: item.call_desc || '',
+                resolve_desc: item.resolve_desc || '',
+                status: item.status || '计划',
+              })
+            }
             break
+          }
         }
         count++
       } catch (e) {

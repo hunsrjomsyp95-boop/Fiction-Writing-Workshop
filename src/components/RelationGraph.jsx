@@ -51,7 +51,7 @@ function computeLayout(chars, rels) {
     nd.x = cx + R * Math.cos(a)
     nd.y = cy + R * Math.sin(a)
   })
-  const edges = rels.map((r) => ({ a: r.char_a_id, b: r.char_b_id, type: r.type, dir: r.direction }))
+  const edges = rels.map((r) => ({ a: r.char_a_id, b: r.char_b_id, type: r.type, type_b: r.type_b, dir: r.direction }))
 
   // 节点度（关系数）
   const degree = {}
@@ -392,6 +392,17 @@ export default function RelationGraph({ novel, onOpenCharacter: _onOpenCharacter
             >
               <path d='M0,0 L10,5 L0,10 z' fill='#8b8ba8' />
             </marker>
+            <marker
+              id='arrow-start'
+              viewBox='0 0 10 10'
+              refX='-1'
+              refY='5'
+              markerWidth='7'
+              markerHeight='7'
+              orient='auto-start-reverse'
+            >
+              <path d='M10,0 L0,5 L10,10 z' fill='#8b8ba8' />
+            </marker>
           </defs>
 
           {/* 连线 */}
@@ -401,6 +412,36 @@ export default function RelationGraph({ novel, onOpenCharacter: _onOpenCharacter
             if (!a || !b) return null
             const dim = linked && (!linked.has(e.a) || !linked.has(e.b))
             const active = hover && !dim
+
+            if (e.dir === '双向') {
+              const dx = b.x - a.x
+              const dy = b.y - a.y
+              const len = Math.hypot(dx, dy) || 1
+              const nx = -dy / len * 6
+              const ny = dx / len * 6
+              const ax1 = a.x + nx, ay1 = a.y + ny
+              const bx1 = b.x + nx, by1 = b.y + ny
+              const ax2 = a.x - nx, ay2 = a.y - ny
+              const bx2 = b.x - nx, by2 = b.y - ny
+              const mx1 = (ax1 + bx1) / 2, my1 = (ay1 + by1) / 2
+              const mx2 = (ax2 + bx2) / 2, my2 = (ay2 + by2) / 2
+              const labelA = e.type
+              const labelB = e.type_b && e.type_b !== e.type ? e.type_b : e.type
+
+              return (
+                <g key={i} opacity={dim ? 0.08 : active ? 1 : 0.5}>
+                  <line x1={ax1} y1={ay1} x2={bx1} y2={by1} stroke={hashColor(e.type)} strokeWidth={active ? 3 : 1.6} markerEnd='url(#arrow)' />
+                  <line x1={ax2} y1={ay2} x2={bx2} y2={by2} stroke={hashColor(e.type_b || e.type)} strokeWidth={active ? 3 : 1.6} markerEnd='url(#arrow)' />
+                  {active && (
+                    <>
+                      <text x={mx1} y={my1 - 4} textAnchor='middle' fontSize={12} fill='#e6e6ef' stroke='#1e1e2e' strokeWidth={3} paintOrder='stroke'>{labelA}</text>
+                      <text x={mx2} y={my2 - 4} textAnchor='middle' fontSize={12} fill='#e6e6ef' stroke='#1e1e2e' strokeWidth={3} paintOrder='stroke'>{labelB}</text>
+                    </>
+                  )}
+                </g>
+              )
+            }
+
             const mx = (a.x + b.x) / 2
             const my = (a.y + b.y) / 2
             return (
@@ -412,7 +453,7 @@ export default function RelationGraph({ novel, onOpenCharacter: _onOpenCharacter
                   y2={b.y}
                   stroke={hashColor(e.type)}
                   strokeWidth={active ? 3 : 1.6}
-                  markerEnd={e.dir === '单向' ? 'url(#arrow)' : undefined}
+                  markerEnd='url(#arrow)'
                 />
                 {active && (
                   <text

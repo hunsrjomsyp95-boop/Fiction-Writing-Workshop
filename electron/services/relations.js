@@ -16,13 +16,14 @@ function createRelation(novelId, patch = {}) {
     throw new Error('关系需要两个不同的人物')
   const info = d
     .prepare(
-      'INSERT INTO relations (novel_id, char_a_id, char_b_id, type, label, direction, description) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO relations (novel_id, char_a_id, char_b_id, type, type_b, label, direction, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     )
     .run(
       novelId,
       patch.char_a_id,
       patch.char_b_id,
       patch.type || '认识',
+      patch.type_b || '',
       patch.label || '',
       patch.direction || '双向',
       patch.description || ''
@@ -39,8 +40,8 @@ function updateRelation(id, patch) {
   if (!cur) return null
   const next = { ...cur, ...patch, id }
   d.prepare(
-    "UPDATE relations SET type=?, label=?, direction=?, description=?, updated_at=datetime('now','localtime') WHERE id=?"
-  ).run(next.type, next.label, next.direction, next.description, id)
+    "UPDATE relations SET type=?, type_b=?, label=?, direction=?, description=?, updated_at=datetime('now','localtime') WHERE id=?"
+  ).run(next.type, next.type_b || '', next.label, next.direction, next.description, id)
   return d
     .prepare(
       'SELECT r.*, a.name AS char_a_name, b.name AS char_b_name FROM relations r LEFT JOIN characters a ON a.id=r.char_a_id LEFT JOIN characters b ON b.id=r.char_b_id WHERE r.id=?'

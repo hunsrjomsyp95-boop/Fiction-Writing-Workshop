@@ -2,9 +2,9 @@
 import { useToast } from '../ToastContext.jsx'
 import { useDialog } from '../Dialog.jsx'
 import RelationGraph from './RelationGraph.jsx'
-import { User, UserRound, Baby, PersonStanding, Dog, Skull, Crown } from 'lucide-react'
+import { User, UserRound, Baby, PersonStanding, Dog, Skull, Crown, Plus, X } from 'lucide-react'
 
-const ROLES = ['主角', '重要配角', '配角', '反派', '龙套', '未定']
+const DEFAULT_ROLES = ['主角', '重要配角', '配角', '反派', '龙套', '未定']
 
 const CHAR_ICONS = [
   { id: '', label: '无', Icon: null },
@@ -22,7 +22,7 @@ const ICON_MAP = { male: User, female: UserRound, child: Baby, elder: PersonStan
 const FIELDS = [
   { key: 'name', label: '姓名' },
   { key: 'alias', label: '别名/称号' },
-  { key: 'role', label: '定位', select: ROLES },
+  { key: 'role', label: '定位', select: true },
   { key: 'gender', label: '性别' },
   { key: 'age', label: '年龄' },
   { key: 'appearance', label: '外貌', textarea: true },
@@ -47,12 +47,41 @@ export default function CharactersView({ novel }) {
   const [appearances, setAppearances] = useState([])
   const [dragging, setDragging] = useState(null)
   const [dragOver, setDragOver] = useState(null)
+  const [customRoles, setCustomRoles] = useState([])
 
   const currentRef = useRef(null)
   const formRef = useRef(null)
   const saveTimer = useRef(null)
   currentRef.current = current
   formRef.current = form
+
+  const allRoles = useMemo(() => [...DEFAULT_ROLES, ...customRoles.filter(r => !DEFAULT_ROLES.includes(r))], [customRoles])
+
+  useEffect(() => {
+    window.api.getSetting('custom_roles', '[]').then(v => {
+      try { setCustomRoles(JSON.parse(v)) } catch { setCustomRoles([]) }
+    })
+  }, [])
+
+  const saveCustomRoles = useCallback(async (roles) => {
+    setCustomRoles(roles)
+    await window.api.setSetting('custom_roles', JSON.stringify(roles))
+  }, [])
+
+  const addCustomRole = useCallback(async () => {
+    const name = await prompt({ title: '添加自定义定位', value: '' })
+    if (!name || !name.trim()) return
+    if (allRoles.includes(name.trim())) { toast('该定位已存在', 'error'); return }
+    const newRoles = [...customRoles, name.trim()]
+    await saveCustomRoles(newRoles)
+    toast(`已添加「${name.trim()}」`, 'success')
+  }, [customRoles, allRoles, prompt, toast, saveCustomRoles])
+
+  const removeCustomRole = useCallback(async (role) => {
+    const newRoles = customRoles.filter(r => r !== role)
+    await saveCustomRoles(newRoles)
+    toast(`已删除「${role}」`, 'success')
+  }, [customRoles, saveCustomRoles, toast])
 
   const doSave = useCallback(async (data) => {
     if (!data || !data.id || !data.name?.trim()) return
@@ -225,7 +254,7 @@ export default function CharactersView({ novel }) {
                 />
                 <select style={{ width: 140 }} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
                   <option value=''>全部定位</option>
-                  {ROLES.map((r) => (
+                  {allRoles.map((r) => (
                     <option key={r}>{r}</option>
                   ))}
                 </select>
@@ -330,7 +359,18 @@ export default function CharactersView({ novel }) {
                   {FIELDS.map((f) => (
                     <div className='form-field' key={f.key}>
                       <label>{f.label}</label>
-                      {f.select ? (
+                      {f.key === 'role' ? (
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <select value={form[f.key] || ''} onChange={(e) => updateFormField(f.key, e.target.value)} style={{ flex: 1 }}>
+                            {allRoles.map((s) => (
+                              <option key={s}>{s}</option>
+                            ))}
+                          </select>
+                          <button className='ghost small' onClick={addCustomRole} title='添加自定义定位' style={{ padding: '4px 6px' }}>
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                      ) : f.select ? (
                         <select value={form[f.key]} onChange={(e) => updateFormField(f.key, e.target.value)}>
                           {f.select.map((s) => (
                             <option key={s}>{s}</option>
@@ -351,6 +391,24 @@ export default function CharactersView({ novel }) {
                     </div>
                   ))}
 
+                  {customRoles.length > 0 && (
+                    <div className='form-field'>
+                      <label>自定义定位管理</label>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {customRoles.map(r => (
+                          <span key={r} className='badge' style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {r}
+                            {!DEFAULT_ROLES.includes(r) && (
+                              <button className='ghost' onClick={() => removeCustomRole(r)} style={{ padding: 0, fontSize: 11 }}>
+                                <X size={12} />
+                              </button>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className='list-header' style={{ padding: '8px 0', border: 'none' }}>
                     <h3>人物关系（{relations.length}）</h3>
                     <div className='grow' />
@@ -361,6 +419,7 @@ export default function CharactersView({ novel }) {
                           char_a_id: form.id,
                           char_b_id: '',
                           type: '认识',
+                          type_b: '',
                           label: '',
                           direction: '双向',
                           description: '',
@@ -379,7 +438,7 @@ export default function CharactersView({ novel }) {
                         <div className='grow'>
                           <div className='row wrap'>
                             <b>{other}</b>
-                            <span className='badge accent'>{r.type}</span>
+                            <span className='badge accent'>{r.char_a_id === form.id ? r.type : (r.type_b || r.type)}</span>
                             <span className='badge'>{r.direction}</span>
                           </div>
                           {r.label && (
@@ -503,6 +562,16 @@ export default function CharactersView({ novel }) {
                         </select>
                       </div>
                     </div>
+                    {relForm.direction === '双向' && (
+                      <div className='form-field'>
+                        <label>反向标签（对方看你的称呼）</label>
+                        <input
+                          value={relForm.type_b || ''}
+                          onChange={(e) => setRelForm({ ...relForm, type_b: e.target.value })}
+                          placeholder='如：父亲→儿子，师父→徒弟'
+                        />
+                      </div>
+                    )}
                     <div className='form-field'>
                       <label>关系标签（简短）</label>
                       <input
@@ -585,6 +654,16 @@ export default function CharactersView({ novel }) {
                         </select>
                       </div>
                     </div>
+                    {editRel.direction === '双向' && (
+                      <div className='form-field'>
+                        <label>反向标签（对方看你的称呼）</label>
+                        <input
+                          value={editRel.type_b || ''}
+                          onChange={(e) => setEditRel({ ...editRel, type_b: e.target.value })}
+                          placeholder='如：父亲→儿子，师父→徒弟'
+                        />
+                      </div>
+                    )}
                     <div className='form-field'>
                       <label>关系标签（简短）</label>
                       <input
@@ -609,6 +688,7 @@ export default function CharactersView({ novel }) {
                       onClick={async () => {
                         await window.api.updateRelation(editRel.id, {
                           type: editRel.type,
+                          type_b: editRel.type_b || '',
                           direction: editRel.direction,
                           label: editRel.label,
                           description: editRel.description,
