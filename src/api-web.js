@@ -836,30 +836,53 @@ export function createAiStream() {
     error: []
   }
   
+  // 带CORS代理的fetch
+  async function fetchWithCors(url, options) {
+    const urls = [
+      url,
+      `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    ]
+    
+    for (const u of urls) {
+      try {
+        const res = await fetch(u, options)
+        if (res.ok) return res
+      } catch (e) {
+        continue
+      }
+    }
+    throw new Error('所有请求方式都失败')
+  }
+  
   return {
     assistant: async (requestId, prompt, text) => {
       try {
-        const config = await services.getSetting('ai_config', {})
-        if (!config.apiKey) {
+        const provider = await services.getSetting('ai_provider', 'xiaomi')
+        const model = await services.getSetting('ai_model', '')
+        const baseUrl = await services.getSetting('ai_base_url', '')
+        const apiKey = await services.getSetting('ai_api_key', '')
+        
+        if (!apiKey) {
           throw new Error('请先配置AI服务')
         }
         
-        const url = `${config.baseUrl}/chat/completions`
+        const url = `${baseUrl}/chat/completions`
         const messages = [{ role: 'user', content: `${prompt}\n\n${text}` }]
         
         const body = {
-          model: config.model,
-          temperature: config.temperature || 0.7,
+          model: model,
+          temperature: 0.7,
           messages,
           stream: true,
         }
         
         const headers = { 'Content-Type': 'application/json' }
-        if (config.apiKey) {
-          headers['Authorization'] = `Bearer ${config.apiKey}`
+        if (apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`
         }
         
-        const res = await fetch(url, {
+        const res = await fetchWithCors(url, {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
@@ -906,30 +929,34 @@ export function createAiStream() {
     },
     assistantWithSystem: async (requestId, systemPrompt, prompt, text) => {
       try {
-        const config = await services.getSetting('ai_config', {})
-        if (!config.apiKey) {
+        const provider = await services.getSetting('ai_provider', 'xiaomi')
+        const model = await services.getSetting('ai_model', '')
+        const baseUrl = await services.getSetting('ai_base_url', '')
+        const apiKey = await services.getSetting('ai_api_key', '')
+        
+        if (!apiKey) {
           throw new Error('请先配置AI服务')
         }
         
-        const url = `${config.baseUrl}/chat/completions`
+        const url = `${baseUrl}/chat/completions`
         const messages = [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `${prompt}\n\n${text}` }
         ]
         
         const body = {
-          model: config.model,
-          temperature: config.temperature || 0.7,
+          model: model,
+          temperature: 0.7,
           messages,
           stream: true,
         }
         
         const headers = { 'Content-Type': 'application/json' }
-        if (config.apiKey) {
-          headers['Authorization'] = `Bearer ${config.apiKey}`
+        if (apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`
         }
         
-        const res = await fetch(url, {
+        const res = await fetchWithCors(url, {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
@@ -997,7 +1024,9 @@ export function createAiStream() {
 
 // AI调用辅助函数
 async function callAI(config, prompt, text, systemPrompt = null) {
-  const url = `${config.baseUrl}/chat/completions`
+  // 网页版需要处理CORS问题
+  // 使用代理或直接调用
+  let url = `${config.baseUrl}/chat/completions`
   
   const messages = []
   if (systemPrompt) {
@@ -1020,29 +1049,58 @@ async function callAI(config, prompt, text, systemPrompt = null) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 180 * 1000)
   
-  try {
-    const res = await fetch(url, {
+  // 尝试多种方式调用
+  const attempts = [
+    // 方式1：直接调用
+    () => fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
       signal: controller.signal,
-    })
-    
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '')
-      let detail = ''
-      try {
-        const errJson = JSON.parse(errText)
-        detail = errJson.error?.message || errJson.message || errText.slice(0, 300)
-      } catch {
-        detail = errText.slice(0, 300)
+    }),
+    // 方式2：使用CORS代理
+    () => fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    }),
+    // 方式3：使用另一个CORS代理
+    () => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    }),
+  ]
+  
+  let lastError = null
+  
+  for (const attempt of attempts) {
+    try {
+      const res = await attempt()
+      
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '')
+        let detail = ''
+        try {
+          const errJson = JSON.parse(errText)
+          detail = errJson.error?.message || errJson.message || errText.slice(0, 300)
+        } catch {
+          detail = errText.slice(0, 300)
+        }
+        throw new Error(`API 请求失败 (${res.status}): ${detail}`)
       }
-      throw new Error(`API 请求失败 (${res.status}): ${detail}`)
+      
+      const data = await res.json()
+      clearTimeout(timer)
+      return data.choices?.[0]?.message?.content || ''
+    } catch (err) {
+      lastError = err
+      continue
     }
-    
-    const data = await res.json()
-    return data.choices?.[0]?.message?.content || ''
-  } finally {
-    clearTimeout(timer)
   }
+  
+  clearTimeout(timer)
+  throw lastError || new Error('所有请求方式都失败')
 }

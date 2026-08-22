@@ -156,9 +156,9 @@ async function chat(messages, opts = {}) {
       const sysIdx = messages.findIndex(m => m.role === 'system')
       if (sysIdx >= 0) {
         messages = [...messages]
-        messages[sysIdx] = { ...messages[sysIdx], content: messages[sysIdx].content + '\n\n---\n\n# 参考知识\n\n' + skillCtx }
+        messages[sysIdx] = { ...messages[sysIdx], content: messages[sysIdx].content + '\n\n---\n\n# 参考知识（写作时参考以下内容，但不要直接引用）\n\n' + skillCtx }
       } else {
-        messages = [{ role: 'system', content: '参考知识：\n\n' + skillCtx }, ...messages]
+        messages = [{ role: 'system', content: '参考知识（写作时参考以下内容，但不要直接引用）：\n\n' + skillCtx }, ...messages]
       }
     }
   }
@@ -220,9 +220,9 @@ async function chatStream(messages, opts = {}) {
       const sysIdx = messages.findIndex(m => m.role === 'system')
       if (sysIdx >= 0) {
         messages = [...messages]
-        messages[sysIdx] = { ...messages[sysIdx], content: messages[sysIdx].content + '\n\n---\n\n# 参考知识\n\n' + skillCtx }
+        messages[sysIdx] = { ...messages[sysIdx], content: messages[sysIdx].content + '\n\n---\n\n# 参考知识（写作时参考以下内容，但不要直接引用）\n\n' + skillCtx }
       } else {
-        messages = [{ role: 'system', content: '参考知识：\n\n' + skillCtx }, ...messages]
+        messages = [{ role: 'system', content: '参考知识（写作时参考以下内容，但不要直接引用）：\n\n' + skillCtx }, ...messages]
       }
     }
   }
@@ -386,8 +386,24 @@ async function aiProofread(text) {
     [
       {
         role: 'system',
-        content:
-          '你是一位严谨的中文文字校对专家。请找出用户文本中的错别字、错词、语病，只返回 JSON 数组，不要其他内容。数组元素格式：{"wrong":"原文错误片段","right":"正确写法","reason":"简要原因"}。如无问题返回空数组 []。',
+        content: `你是一位严谨的中文文字校对专家。请仔细检查用户文本中的以下问题：
+
+1. 错别字：同音字、形近字误用
+2. 错词：词语搭配不当、成语误用
+3. 语病：成分残缺、搭配不当、语序不当、重复啰嗦
+4. 标点符号：标点使用错误、缺失、多余
+5. 的地得混用：助词使用不当
+6. 量词错误：量词与名词搭配不当
+
+只返回 JSON 数组，不要其他内容。
+数组元素格式：{"wrong":"原文错误片段","right":"正确写法","reason":"简要原因","type":"错别字/错词/语病/标点/的地得/量词"}
+如无问题返回空数组 []。
+
+注意：
+- 不要修改风格和表达方式，只找硬伤
+- 不要把口语化表达当成错误
+- 不要把文学性的省略当成语病
+- 网文中常见的"一句一段"不是语病`,
       },
       { role: 'user', content: text.slice(0, 500000) },
     ],
@@ -402,7 +418,16 @@ async function aiAssistant(prompt, text = '') {
     [
       {
         role: 'system',
-        content: '你是资深的小说创作助手，擅长网文/出版小说的结构、人物、世界观设计，能给出具体可执行的建议。',
+        content: `你是资深的小说创作助手，擅长网文/出版小说的结构、人物、世界观设计，能给出具体可执行的建议。
+
+【核心原则】
+1. 情绪是网文的核心武器——针对读者心中普适性情绪的聚集，进行准确的一刀致命
+2. 期待感管理：读者期待什么？什么时候满足？什么时候制造新的期待？
+3. 展示而非告知：用动作和细节传达，不要直接说
+4. 信任读者：不要解释两次，不要替读者总结
+5. 去AI味：不用"他感到、不是...而是...、然而、尽管如此"等表达
+
+请给出具体、可落地的建议，不要泛泛而谈。`,
       },
       { role: 'user', content: prompt + (text ? `\n\n——以下是相关文本——\n${text.slice(0, 500000)}` : '') },
     ],
@@ -791,13 +816,14 @@ const EXTRACT_SYSTEM = `你是一位资深的小说内容分析专家，擅长�
 提取要求：
 1. 尽可能完整提取，不要遗漏任何有价值的信息
 2. 如果文本中提到了多个名字但没有明确说明是同一人，分别提取
-3. 人物关系要提取所有明确提到的关系
-4. 世界观设定要提取所有提到的规则、体系、地理等
-5. 物品要提取所有提到的道具、武器、地点等
-6. 伏笔要提取所有悬念、暗示、未解之谜
+3. 人物关系要提取所有明确提到的关系，包括隐含关系（如对话中的称呼）
+4. 世界观设定要提取所有提到的规则、体系、地理、历史等
+5. 物品要提取所有提到的道具、武器、地点、丹药等
+6. 伏笔要提取所有悬念、暗示、未解之谜、"为什么"类的问题
 7. 如果某个字段在文本中没有提到，留空字符串""，不要编造
 8. 如果某类没有提取到，返回空数组 []
-9. 角色名、设定名等必须与原文一致，不要修改`
+9. 角色名、设定名等必须与原文一致，不要修改
+10. 对于隐含信息要推断：如"他握紧了剑柄"可以推断他持有武器`
 
 const EMPTY_RESULT = { characters: [], worlds: [], items: [], events: [], foreshadowings: [] }
 
@@ -884,8 +910,16 @@ async function aiFilterContent(content, topic) {
     [
       {
         role: 'system',
-        content:
-          '你是一位资料筛选助手。用户正在搜集创作资料，他会提供一个感兴趣的主题，以及一段爬取到的网页内容。请判断这段内容是否与主题相关、有参考价值。只返回 JSON，不要其他文字。格式：{"relevant": true/false, "reason": "简要理由", "confidence": "high/medium/low"}',
+        content: `你是一位资料筛选助手。用户正在搜集创作资料，他会提供一个感兴趣的主题，以及一段爬取到的网页内容。请判断这段内容是否与主题相关、有参考价值。
+
+判断标准：
+1. 直接相关：内容直接讨论主题相关的领域
+2. 间接相关：内容涉及主题的背景知识、历史渊源、类似案例
+3. 灵感价值：内容虽不直接相关，但能提供创作灵感
+4. 无价值：内容与主题完全无关，或质量太低
+
+只返回 JSON，不要其他文字。
+格式：{"relevant": true/false, "reason": "简要理由", "confidence": "high/medium/low", "value": "直接相关/间接相关/灵感价值/无价值"}`,
       },
       { role: 'user', content: `主题：${topic}\n\n网页内容：\n${(content || '').slice(0, 100000)}` },
     ],

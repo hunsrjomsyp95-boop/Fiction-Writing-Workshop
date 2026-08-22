@@ -45,43 +45,55 @@ function buildProjectContext(novelId) {
   const d = services.use()
   try {
     const worlds = d.prepare('SELECT name, content, category FROM worlds WHERE novel_id = ?').all(novelId)
-    const chars = d.prepare('SELECT name, role, personality, background FROM characters WHERE novel_id = ?').all(novelId)
+    const chars = d.prepare('SELECT name, role, personality, background, appearance, relationships FROM characters WHERE novel_id = ?').all(novelId)
     const outlines = d.prepare('SELECT title, content FROM outlines WHERE novel_id = ?').all(novelId)
     const timeline = d.prepare('SELECT story_time, title FROM timeline_events WHERE novel_id = ? ORDER BY order_index').all(novelId)
-    const fsh = d.prepare('SELECT title, status FROM foreshadowings WHERE novel_id = ?').all(novelId)
+    const fsh = d.prepare('SELECT title, status, setup_desc FROM foreshadowings WHERE novel_id = ?').all(novelId)
     const rules = d.prepare('SELECT era, type, item, content FROM world_rules WHERE novel_id = ?').all(novelId)
 
     const parts = []
 
     if (worlds.length) {
-      const worldText = worlds.map(w => `${w.name}：${(w.content || '').slice(0, 120)}`).join('\n').slice(0, 8000)
-      parts.push(`【世界观】\n${worldText}`)
+      const worldText = worlds.map(w => {
+        const cat = w.category ? `[${w.category}]` : ''
+        return `${w.name}${cat}：${(w.content || '').slice(0, 200)}`
+      }).join('\n').slice(0, 12000)
+      parts.push(`【世界观设定】\n${worldText}`)
     }
 
     if (chars.length) {
-      const charText = chars.map(c => `${c.name}（${c.role}）：${(c.personality || c.background || '').slice(0, 100)}`).join('\n').slice(0, 5000)
-      parts.push(`【人物】\n${charText}`)
+      const charText = chars.map(c => {
+        const role = c.role ? `(${c.role})` : ''
+        const desc = c.personality || c.background || ''
+        const appearance = c.appearance ? ` 外貌：${c.appearance.slice(0, 60)}` : ''
+        const rel = c.relationships ? ` 关系：${c.relationships.slice(0, 80)}` : ''
+        return `${c.name}${role}：${desc.slice(0, 120)}${appearance}${rel}`
+      }).join('\n').slice(0, 8000)
+      parts.push(`【人物档案】\n${charText}`)
     }
 
     if (outlines.length) {
-      const outlineText = outlines.map(o => `${o.title}：${(o.content || '').slice(0, 100)}`).join('\n').slice(0, 4000)
-      parts.push(`【大纲】\n${outlineText}`)
+      const outlineText = outlines.map(o => `${o.title}：${(o.content || '').slice(0, 150)}`).join('\n').slice(0, 6000)
+      parts.push(`【故事大纲】\n${outlineText}`)
     }
 
     if (timeline.length) {
-      const timeText = timeline.map(t => `${t.story_time || '?'} ${t.title}`).join('；').slice(0, 1500)
+      const timeText = timeline.map(t => `${t.story_time || '?'} ${t.title}`).join('；').slice(0, 2000)
       parts.push(`【故事年表】\n${timeText}`)
     }
 
     if (fsh.length) {
-      const fshText = fsh.map(f => `${f.title}(${f.status})`).join('、').slice(0, 1500)
+      const fshText = fsh.map(f => {
+        const desc = f.setup_desc ? `(${f.setup_desc.slice(0, 50)})` : ''
+        return `${f.title}[${f.status}]${desc}`
+      }).join('\n').slice(0, 2000)
       parts.push(`【伏笔状态】\n${fshText}`)
     }
 
     if (rules.length) {
       const ruleText = rules.map(r =>
-        `${r.era}/${r.type === '史实' ? '史实' : '架空'}：${r.item}${r.content ? ' - ' + r.content.slice(0, 80) : ''}`
-      ).join('\n').slice(0, 3000)
+        `${r.era}/${r.type === '史实' ? '◈史实' : '◇架空'}：${r.item}${r.content ? ' - ' + r.content.slice(0, 100) : ''}`
+      ).join('\n').slice(0, 5000)
       parts.push(`【真实与幻想规则】\n${ruleText}`)
     }
 

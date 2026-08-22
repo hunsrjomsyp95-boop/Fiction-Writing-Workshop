@@ -552,3 +552,113 @@ Bug：GitHub Releases 自动更新配置
 
 关键教训：发布前必须先 push tag，否则 electron-builder 会报422错误；打包 ia32 后需要 electron-rebuild 恢复开发环境。
 
+
+Bug：关系网反向标签不显示（v1.3.4 修复）
+症状：双向关系创建时填写了反向标签，但关系网两条线都显示正向标签。
+
+根因：computeLayout 函数构建边数据时漏掉了 type_b 字段。
+
+修复（RelationGraph.jsx）：
+// 旧：只传递 type 和 dir
+const edges = rels.map((r) => ({ a: r.char_a_id, b: r.char_b_id, type: r.type, dir: r.direction }))
+
+// 新：加上 type_b
+const edges = rels.map((r) => ({ a: r.char_a_id, b: r.char_b_id, type: r.type, type_b: r.type_b, dir: r.direction }))
+
+关键教训：渲染组件使用的数据结构必须包含所有需要的字段，不能遗漏。
+
+
+Bug：AI流式输出报错 res.body.getReader is not a function（v1.3.5 修复）
+症状：AI 写作功能报错 res.body.getReader is not a function。
+
+根因：为支持代理功能将 fetch 从内置改为 node-fetch v2，但 node-fetch v2 的 res.body 是 Node.js Readable 流，不支持 Web Streams API 的 getReader()。
+
+修复（ai.js）：
+// 旧：使用 Web Streams API
+const reader = res.body.getReader()
+for (;;) {
+  const { done, value } = await reader.read()
+  if (done) break
+  buffer += decoder.decode(value, { stream: true })
+}
+
+// 新：使用 Node.js 异步迭代器
+for await (const chunk of stream) {
+  buffer += chunk.toString()
+}
+
+关键教训：node-fetch v2 和浏览器内置 fetch 的流 API 不同，需要用 Node.js 原生的异步迭代器读取。
+
+
+Bug：选区润色替换位置错误（v1.3.5 修复）
+症状：选中文字后点击润色，替换位置错误或替换全文。
+
+根因：handlePolish 调用 onAction 后立即调用 onClose 清空了 selection 状态，异步 AI 请求完成后用 selection?.from ?? 0 拿到的是 0。
+
+修复（ChaptersView.jsx）：
+// 旧：直接用 selection（已被清空）
+v.dispatch({ changes: { from: selection?.from ?? 0, to: selection?.to ?? 0, insert: polished } })
+
+// 新：操作前保存选区
+const sel = selection
+// ... 异步操作后用 sel.from / sel.to
+v.dispatch({ changes: { from: sel.from, to: sel.to, insert: polished } })
+
+关键教训：异步操作前必须用变量保存当前状态，不能依赖闭包中的 state（可能已被清空）。
+
+
+Bug：打包卡住不动（反复出现）
+症状：electron-builder 卡在 packaging 步骤不动。
+
+根因：残留的 node 进程占用资源，或 Electron 二进制下载超时。
+
+修复：
+1. 先杀掉残留进程：Stop-Process -Name "node" -Force
+2. 再重试打包
+
+关键教训：打包前先检查并清理残留的 node/electron 进程。
+
+
+功能：章节右键菜单（v1.3.0 新增）
+需求：右键点击章节弹出菜单，支持重命名、导出、概括、删除。
+
+实现：
+- ChapterItem 新增 onContextMenu prop
+- ChaptersView 新增 ctxMenu 状态（位置 + 目标章节）
+- 右键菜单自动检测视口边界，点击其他区域自动关闭
+
+关键教训：右键菜单需要用 fixed 定位 + 视口边界检测，避免溢出屏幕。
+
+
+功能：人物设定自动保存（v1.3.0 新增）
+需求：编辑人物卡片时内容变化就自动保存，切换/新建人物不丢失修改。
+
+实现：
+- 新增 saveTimer ref 和 doSave/scheduleSave 函数
+- updateFormField 中调用 scheduleSave(next) 实现 1.2 秒 debounce 自动保存
+- create/openEdit/关闭按钮都会先保存当前表单
+
+关键教训：自动保存需要 debounce 避免频繁写入，切换前先保存。
+
+
+功能：AI提取实体合并（v1.3.4 优化）
+需求：AI提取时已存在的实体不再重复创建，文本字段自动拼接合并。
+
+实现：
+- findByName 函数统一按 name/alias/title 匹配
+- mergeText 函数处理文本合并（去重、拼接）
+- 非文本字段只在旧值是默认值时覆盖
+
+关键教训：合并逻辑需要区分文本字段和非文本字段，文本拼接要去重。
+
+
+功能：AI自动更新进度条（v1.3.4 新增）
+需求：自动更新没有进度提示，不知道更新流程开始没有。
+
+实现：
+- main.js 发送 update:event 事件到渲染进程
+- preload.js 暴露 updateListener.onUpdate API
+- Workspace.jsx 监听事件并显示顶部进度条
+
+关键教训：主进程和渲染进程通信需要通过 preload 桥接。
+
