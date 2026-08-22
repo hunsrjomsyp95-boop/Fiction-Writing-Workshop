@@ -117,6 +117,12 @@ export default function AISettings() {
         <div className='hint'>手机热点等网络无法连接时，可配置代理。留空则不使用代理。</div>
       </div>
 
+      <div className='form-field'>
+        <label>CORS代理地址（网页版专用）</label>
+        <input value={aiCfg.corsProxy || ''} onChange={(e) => setAiCfg({ ...aiCfg, corsProxy: e.target.value })} placeholder='https://你的Worker地址.workers.dev' />
+        <div className='hint'>网页版AI功能需要CORS代理。部署 cloudflare-worker.js 后填入地址。</div>
+      </div>
+
       <div className='panel' style={{ padding: 10, marginTop: 8, fontSize: 12 }}>
         <div><span className='dim'>服务商：</span>{provider?.name}</div>
         <div><span className='dim'>模型：</span>{aiCfg.model || '未选择'}</div>

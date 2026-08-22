@@ -230,13 +230,15 @@ export function createApi() {
       const baseUrl = await services.getSetting('ai_base_url', '')
       const apiKey = await services.getSetting('ai_api_key', '')
       const temperature = await services.getSetting('ai_temperature', '0.7')
+      const corsProxy = await services.getSetting('ai_cors_proxy', '')
       
       return {
         provider,
         baseUrl,
         apiKey,
         model,
-        temperature: Number(temperature)
+        temperature: Number(temperature),
+        corsProxy
       }
     },
     aiSaveConfig: async (cfg) => {
@@ -247,6 +249,7 @@ export function createApi() {
       await services.setSetting('ai_api_key', (cfg.apiKey || '').trim())
       await services.setSetting('ai_model', (cfg.model || '').trim())
       await services.setSetting('ai_temperature', String(Number(cfg.temperature) || 0.7))
+      await services.setSetting('ai_cors_proxy', (cfg.corsProxy || '').trim())
       return true
     },
     aiTest: async () => {
@@ -1027,7 +1030,7 @@ export function createAiStream() {
 
 // AI调用辅助函数
 async function callAI(config, prompt, text, systemPrompt = null) {
-  let url = `${config.baseUrl}/chat/completions`
+  const targetUrl = `${config.baseUrl}/chat/completions`
   
   const messages = []
   if (systemPrompt) {
@@ -1044,8 +1047,8 @@ async function callAI(config, prompt, text, systemPrompt = null) {
   
   const bodyStr = JSON.stringify(body)
   
-  const makeHeaders = (extra = {}) => {
-    const h = { 'Content-Type': 'application/json', ...extra }
+  const makeHeaders = () => {
+    const h = { 'Content-Type': 'application/json' }
     if (config.apiKey) h['Authorization'] = `Bearer ${config.apiKey}`
     return h
   }
@@ -1053,17 +1056,31 @@ async function callAI(config, prompt, text, systemPrompt = null) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 180 * 1000)
   
-  // CORS代理列表
-  const attempts = [
-    // 直接调用（部分API支持CORS）
-    { url, headers: makeHeaders() },
-    // corsproxy.io
-    { url: `https://corsproxy.io/?${encodeURIComponent(url)}`, headers: makeHeaders() },
-    // thingproxy
-    { url: `https://thingproxy.freeboard.io/fetch/${url}`, headers: makeHeaders() },
-    // cors.sh
-    { url: `https://cors.sh/${url}`, headers: makeHeaders({ 'x-cors-api-key': 'temp_key' }) },
-  ]
+  // 获取用户配置的代理地址
+  const proxyUrl = await services.getSetting('ai_cors_proxy', '')
+  
+  // 构建请求列表
+  const attempts = []
+  
+  // 如果有代理配置，优先使用代理
+  if (proxyUrl) {
+    attempts.push({
+      url: `${proxyUrl.replace(/\/$/, '')}/proxy/${encodeURIComponent(targetUrl)}`,
+      headers: makeHeaders(),
+    })
+  }
+  
+  // 直接调用（部分API支持CORS）
+  attempts.push({
+    url: targetUrl,
+    headers: makeHeaders(),
+  })
+  
+  // 公共CORS代理（作为后备）
+  attempts.push({
+    url: `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+    headers: makeHeaders(),
+  })
   
   let lastError = null
   
@@ -1099,5 +1116,5 @@ async function callAI(config, prompt, text, systemPrompt = null) {
   }
   
   clearTimeout(timer)
-  throw new Error('网页版无法直接调用AI API（CORS限制）。请使用桌面版的AI功能，或部署自己的后端代理。')
+  throw new Error('AI请求失败。请在设置中配置CORS代理地址，或使用桌面版。')
 }
