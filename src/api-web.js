@@ -256,15 +256,18 @@ export function createApi() {
       const apiKey = await services.getSetting('ai_api_key', '')
       
       if (!apiKey) {
-        throw new Error('请先配置AI服务')
+        throw new Error('请先配置API Key')
+      }
+      
+      if (!model) {
+        throw new Error('请先选择模型')
       }
       
       try {
-        // 测试AI连接
         const response = await callAI({ baseUrl, apiKey, model }, '你好', '请回复"测试成功"')
         return { ok: true, message: 'AI配置测试成功' }
       } catch (err) {
-        throw new Error('AI测试失败: ' + err.message)
+        throw new Error(err.message)
       }
     },
     aiProofread: async (text) => {
@@ -1024,8 +1027,6 @@ export function createAiStream() {
 
 // AI调用辅助函数
 async function callAI(config, prompt, text, systemPrompt = null) {
-  // 网页版需要处理CORS问题
-  // 使用代理或直接调用
   let url = `${config.baseUrl}/chat/completions`
   
   const messages = []
@@ -1041,44 +1042,39 @@ async function callAI(config, prompt, text, systemPrompt = null) {
     stream: false,
   }
   
-  const headers = { 'Content-Type': 'application/json' }
-  if (config.apiKey) {
-    headers['Authorization'] = `Bearer ${config.apiKey}`
+  const bodyStr = JSON.stringify(body)
+  
+  const makeHeaders = (extra = {}) => {
+    const h = { 'Content-Type': 'application/json', ...extra }
+    if (config.apiKey) h['Authorization'] = `Bearer ${config.apiKey}`
+    return h
   }
   
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 180 * 1000)
   
-  // 尝试多种方式调用
+  // CORS代理列表
   const attempts = [
-    // 方式1：直接调用
-    () => fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    }),
-    // 方式2：使用CORS代理
-    () => fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    }),
-    // 方式3：使用另一个CORS代理
-    () => fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    }),
+    // 直接调用（部分API支持CORS）
+    { url, headers: makeHeaders() },
+    // corsproxy.io
+    { url: `https://corsproxy.io/?${encodeURIComponent(url)}`, headers: makeHeaders() },
+    // thingproxy
+    { url: `https://thingproxy.freeboard.io/fetch/${url}`, headers: makeHeaders() },
+    // cors.sh
+    { url: `https://cors.sh/${url}`, headers: makeHeaders({ 'x-cors-api-key': 'temp_key' }) },
   ]
   
   let lastError = null
   
   for (const attempt of attempts) {
     try {
-      const res = await attempt()
+      const res = await fetch(attempt.url, {
+        method: 'POST',
+        headers: attempt.headers,
+        body: bodyStr,
+        signal: controller.signal,
+      })
       
       if (!res.ok) {
         const errText = await res.text().catch(() => '')
@@ -1097,10 +1093,11 @@ async function callAI(config, prompt, text, systemPrompt = null) {
       return data.choices?.[0]?.message?.content || ''
     } catch (err) {
       lastError = err
+      if (err.name === 'AbortError') break
       continue
     }
   }
   
   clearTimeout(timer)
-  throw lastError || new Error('所有请求方式都失败')
+  throw new Error('网页版无法直接调用AI API（CORS限制）。请使用桌面版的AI功能，或部署自己的后端代理。')
 }
