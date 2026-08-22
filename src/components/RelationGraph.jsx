@@ -426,12 +426,14 @@ export default function RelationGraph({ novel, onOpenCharacter: _onOpenCharacter
               const mx1 = (ax1 + bx1) / 2, my1 = (ay1 + by1) / 2
               const mx2 = (ax2 + bx2) / 2, my2 = (ay2 + by2) / 2
               const labelA = e.type
-              const labelB = e.type_b && e.type_b !== e.type ? e.type_b : e.type
+              const labelB = e.type_b || e.type
 
               return (
                 <g key={i} opacity={dim ? 0.08 : active ? 1 : 0.5}>
+                  {/* A→B */}
                   <line x1={ax1} y1={ay1} x2={bx1} y2={by1} stroke={hashColor(e.type)} strokeWidth={active ? 3 : 1.6} markerEnd='url(#arrow)' />
-                  <line x1={ax2} y1={ay2} x2={bx2} y2={by2} stroke={hashColor(e.type_b || e.type)} strokeWidth={active ? 3 : 1.6} markerEnd='url(#arrow)' />
+                  {/* B→A */}
+                  <line x1={bx2} y1={by2} x2={ax2} y2={ay2} stroke={hashColor(e.type_b || e.type)} strokeWidth={active ? 3 : 1.6} markerEnd='url(#arrow)' />
                   {active && (
                     <>
                       <text x={mx1} y={my1 - 4} textAnchor='middle' fontSize={12} fill='#e6e6ef' stroke='#1e1e2e' strokeWidth={3} paintOrder='stroke'>{labelA}</text>

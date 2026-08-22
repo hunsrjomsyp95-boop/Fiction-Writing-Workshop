@@ -1,6 +1,7 @@
 import { ChevronLeft } from 'lucide-react'
 
 export default function AboutTab() {
+  const version = import.meta.env.VITE_APP_VERSION || '1.3.6'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 0' }}>
       <div style={{ marginBottom: 8 }}>
@@ -8,7 +9,7 @@ export default function AboutTab() {
       </div>
       <h2 style={{ fontSize: 20, fontWeight: 700 }}>小说创作工坊</h2>
       <div className='badge accent' style={{ marginTop: 6 }}>
-        版本 1.3.5
+        版本 {version}
       </div>
 
       <div

@@ -9,12 +9,15 @@ publish:
   releaseType: release
 
 directories:
-  output: release2
+  output: release-ia32
+
+artifactName: "${productName} Setup ${version} ${arch}.${ext}"
 
 files:
   - dist/**
   - electron/**
   - package.json
+  - CHANGELOG.md
   - "!node_modules/**/{test,tests,__tests__,example,examples,doc,docs,markdown}/**"
   - "!node_modules/**/*.{md,txt,map,ts}"
 
@@ -22,7 +25,7 @@ asar: true
 asarUnpack:
   - "**/node_modules/better-sqlite3/**"
 
-npmRebuild: true
+npmRebuild: false
 buildDependenciesFromSource: false
 nodeGypRebuild: false
 forceCodeSigning: false
@@ -31,10 +34,13 @@ win:
   target:
     - target: nsis
       arch:
-        - x64
-    - target: nsis
+        - ia32
+    - target: portable
       arch:
         - ia32
+
+portable:
+  artifactName: "${productName} ${version} ${arch} Portable.${ext}"
 
 nsis:
   oneClick: false

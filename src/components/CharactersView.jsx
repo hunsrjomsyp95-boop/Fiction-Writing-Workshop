@@ -562,16 +562,26 @@ export default function CharactersView({ novel }) {
                         </select>
                       </div>
                     </div>
-                    {relForm.direction === '双向' && (
-                      <div className='form-field'>
-                        <label>反向标签（对方看你的称呼）</label>
-                        <input
-                          value={relForm.type_b || ''}
-                          onChange={(e) => setRelForm({ ...relForm, type_b: e.target.value })}
-                          placeholder='如：父亲→儿子，师父→徒弟'
-                        />
+                    {relForm.direction === '双向' ? (
+                      <div className='form-grid'>
+                        <div className='form-field'>
+                          <label>{form.name || '我'} → {list.find(c => c.id === relForm.char_b_id)?.name || '对方'}</label>
+                          <input
+                            value={relForm.type || ''}
+                            onChange={(e) => setRelForm({ ...relForm, type: e.target.value })}
+                            placeholder='如：父亲'
+                          />
+                        </div>
+                        <div className='form-field'>
+                          <label>{list.find(c => c.id === relForm.char_b_id)?.name || '对方'} → {form.name || '我'}</label>
+                          <input
+                            value={relForm.type_b || ''}
+                            onChange={(e) => setRelForm({ ...relForm, type_b: e.target.value })}
+                            placeholder='如：儿子'
+                          />
+                        </div>
                       </div>
-                    )}
+                    ) : null}
                     <div className='form-field'>
                       <label>关系标签（简短）</label>
                       <input
@@ -654,16 +664,26 @@ export default function CharactersView({ novel }) {
                         </select>
                       </div>
                     </div>
-                    {editRel.direction === '双向' && (
-                      <div className='form-field'>
-                        <label>反向标签（对方看你的称呼）</label>
-                        <input
-                          value={editRel.type_b || ''}
-                          onChange={(e) => setEditRel({ ...editRel, type_b: e.target.value })}
-                          placeholder='如：父亲→儿子，师父→徒弟'
-                        />
+                    {editRel.direction === '双向' ? (
+                      <div className='form-grid'>
+                        <div className='form-field'>
+                          <label>{form.name || '我'} → {list.find(c => c.id === editRel.char_b_id)?.name || '对方'}</label>
+                          <input
+                            value={editRel.type || ''}
+                            onChange={(e) => setEditRel({ ...editRel, type: e.target.value })}
+                            placeholder='如：父亲'
+                          />
+                        </div>
+                        <div className='form-field'>
+                          <label>{list.find(c => c.id === editRel.char_b_id)?.name || '对方'} → {form.name || '我'}</label>
+                          <input
+                            value={editRel.type_b || ''}
+                            onChange={(e) => setEditRel({ ...editRel, type_b: e.target.value })}
+                            placeholder='如：儿子'
+                          />
+                        </div>
                       </div>
-                    )}
+                    ) : null}
                     <div className='form-field'>
                       <label>关系标签（简短）</label>
                       <input

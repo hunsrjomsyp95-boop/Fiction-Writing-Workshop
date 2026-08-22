@@ -1,6 +1,6 @@
 {
   "name": "novel-studio",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "PC端小说写作工具：章节管理、错字更正、版本对比、大纲人物世界观、资料库、AI辅助",
   "main": "electron/main.js",
   "author": "novel-studio",
@@ -24,7 +24,15 @@
     "lint:fix": "eslint src/ electron/ --ext .js,.jsx --fix",
     "format": "prettier --write \"src/**/*.{js,jsx,json,css}\" \"electron/**/*.js\"",
     "test:gui": "npx playwright test",
-    "test:unit": "vitest run"
+    "test:unit": "vitest run",
+    "obfuscate": "node scripts/obfuscate.js",
+    "dist:protected": "npm run obfuscate && npm run build && electron-builder --win",
+    "dist:x64:protected": "npm run obfuscate && npm run build && electron-builder --win --x64 -c.directories.output=release-x64",
+    "dist:ia32:protected": "npm run obfuscate && npm run build && electron-builder --win --ia32 -c electron-builder-ia32.yml",
+    "fast:build": "node scripts/fast-build.js x64",
+    "fast:build:ia32": "node scripts/fast-build.js ia32",
+    "fast:build:skip": "node scripts/fast-build.js x64 --skip-obfuscate",
+    "fast:build:ia32:skip": "node scripts/fast-build.js ia32 --skip-obfuscate"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^8.1.1",
@@ -65,6 +73,7 @@
     "@codemirror/view": "^6.36.4",
     "@playwright/test": "^1.62.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "bytenode": "^1.6.0",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^37.2.0",
@@ -74,6 +83,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "javascript-obfuscator": "^5.5.1",
     "prettier": "^3.9.6",
     "vite": "^6.2.0",
     "vite-plugin-static-copy": "^4.1.1",

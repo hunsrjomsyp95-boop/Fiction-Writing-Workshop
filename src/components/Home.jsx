@@ -69,6 +69,7 @@ export default function Home({ onOpen, toast }) {
       <div style={{ maxWidth: 900, width: '100%' }}>
         <div className='row' style={{ marginBottom: 20 }}>
           <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.3 }}>小说创作工坊</h1>
+          <span className='badge accent' style={{ marginLeft: 8 }}>v{import.meta.env.VITE_APP_VERSION || '1.3.6'}</span>
           <div className='grow' />
           <button className='primary' onClick={() => setCreating(true)}>
             + 新建小说
@@ -165,7 +166,7 @@ export default function Home({ onOpen, toast }) {
         )}
 
         <div style={{ textAlign: 'center', marginTop: 32, fontSize: 11, color: 'var(--text-faint)', opacity: 0.6 }}>
-          v1.3.5 · 免费创作工具
+          v{import.meta.env.VITE_APP_VERSION || '1.3.6'} · 免费创作工具
         </div>
       </div>
     </div>
