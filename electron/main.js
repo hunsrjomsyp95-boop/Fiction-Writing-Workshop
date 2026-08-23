@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain } = require('electron')
 const path = require('path')
 const { init } = require('./db')
 const { registerAll } = require('./ipc')
@@ -17,14 +17,33 @@ autoUpdater.logger = {
   error: (msg) => console.error('[updater]', msg),
 }
 
+// 配置更新源
+const isPackaged = app.isPackaged
+if (isPackaged) {
+  // 使用 GitHub 官方地址（镜像暂不支持 API 代理）
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'hunsrjomsyp95-boop',
+    repo: 'Fiction-Writing-Workshop',
+    releaseType: 'release',
+  })
+  console.log('[updater] 更新源: GitHub')
+}
+
 function checkForUpdates() {
   if (!app.isPackaged) {
     console.log('[updater] 开发模式，跳过更新检查')
     return
   }
-  console.log('[updater] 检查更新...')
+  console.log('[updater] 开始检查更新...')
+  console.log('[updater] 当前版本:', app.getVersion())
+  
   autoUpdater.checkForUpdates().then((result) => {
-    console.log('[updater] 检查结果:', result ? `发现 v${result.updateInfo.version}` : '无更新')
+    if (result) {
+      console.log('[updater] 发现新版本:', result.updateInfo.version)
+    } else {
+      console.log('[updater] 已是最新版本')
+    }
   }).catch((err) => {
     console.error('[updater] 检查失败:', err.message)
   })
@@ -86,6 +105,19 @@ autoUpdater.on('update-downloaded', () => {
 autoUpdater.on('error', (err) => {
   if (win) {
     win.webContents.send('update:event', { status: 'error', message: err.message })
+  }
+})
+
+// 手动检查更新
+ipcMain.handle('update:check', async () => {
+  if (!app.isPackaged) {
+    return { ok: false, error: '开发模式不支持更新' }
+  }
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    return { ok: true, hasUpdate: !!result }
+  } catch (err) {
+    return { ok: false, error: err.message }
   }
 })
 
@@ -185,8 +217,8 @@ app.whenReady().then(() => {
   registerAll(() => win)
   startAutoBackup()
 
-  // 延迟检查更新（启动后 30 秒）
-  setTimeout(checkForUpdates, 30000)
+  // 延迟检查更新（启动后 5秒，便于测试）
+  setTimeout(checkForUpdates, 5000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

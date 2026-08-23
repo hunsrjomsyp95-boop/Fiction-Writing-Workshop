@@ -131,30 +131,45 @@ export default function RelationGraph({ novel, onOpenCharacter: _onOpenCharacter
   const [nodeStyles, setNodeStyles] = useState({})
   const [dragging, setDragging] = useState(null)
   const [sizeOffsets, setSizeOffsets] = useState({})
-  const [posOverrides, setPosOverrides] = useState({})
   const svgRef = useRef(null)
   const [scale, setScale] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [panning, setPanning] = useState(false)
   const panStartRef = useRef(null)
+  const [nodesPos, setNodesPos] = useState({}) // 存储节点位置覆盖
+  const dragRef = useRef(null) // 拖拽状态引用
+  const rafRef = useRef(null) // requestAnimationFrame 引用
+  const [aiRelBusy, setAiRelBusy] = useState(false)
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     Promise.all([window.api.listCharacters(novel.id), window.api.listRelations(novel.id)]).then(([chars, rels]) =>
       setData({ chars, rels })
     )
   }, [novel.id])
 
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
   const layout = useMemo(() => {
     if (!data || data.chars.length === 0) return null
     const l = computeLayout(data.chars, data.rels)
+    // 应用保存的位置和内存中的位置覆盖
     l.nodes.forEach((nd) => {
-      if (posOverrides[nd.id]) {
-        nd.x = posOverrides[nd.id].x
-        nd.y = posOverrides[nd.id].y
+      const pos = nodesPos[nd.id]
+      if (pos) {
+        nd.x = pos.x
+        nd.y = pos.y
+      } else {
+        const char = data.chars.find(c => c.id === nd.id)
+        if (char && (char.graph_x !== 0 || char.graph_y !== 0)) {
+          nd.x = char.graph_x
+          nd.y = char.graph_y
+        }
       }
     })
     return l
-  }, [data, posOverrides])
+  }, [data, nodesPos])
 
   // 获取 SVG 坐标
   const getSvgPoint = (e) => {
@@ -172,38 +187,62 @@ export default function RelationGraph({ novel, onOpenCharacter: _onOpenCharacter
     e.stopPropagation()
     e.preventDefault()
     const pt = getSvgPoint(e)
-    setDragging({
+    dragRef.current = {
       id: nd.id,
       startX: pt.x,
       startY: pt.y,
       nodeStartX: nd.x,
       nodeStartY: nd.y,
-    })
+    }
+    setDragging(dragRef.current)
   }
 
-  // 拖拽中
-  const handleMouseMove = (e) => {
-    if (!dragging) return
-    const pt = getSvgPoint(e)
-    const dx = pt.x - dragging.startX
-    const dy = pt.y - dragging.startY
-    setPosOverrides((prev) => ({
-      ...prev,
-      [dragging.id]: {
-        x: Math.max(30, Math.min(W - 30, dragging.nodeStartX + dx)),
-        y: Math.max(30, Math.min(H - 30, dragging.nodeStartY + dy)),
-      },
-    }))
-  }
+  // 拖拽中 - 使用 requestAnimationFrame 节流
+  const handleMouseMove = useCallback((e) => {
+    if (!dragRef.current) return
+    e.preventDefault()
+    
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    
+    rafRef.current = requestAnimationFrame(() => {
+      const drag = dragRef.current
+      if (!drag) return
+      
+      const pt = getSvgPoint(e)
+      const dx = pt.x - drag.startX
+      const dy = pt.y - drag.startY
+      const newX = drag.nodeStartX + dx
+      const newY = drag.nodeStartY + dy
+      
+      setNodesPos(prev => ({
+        ...prev,
+        [drag.id]: { x: newX, y: newY }
+      }))
+    })
+  }, [])
 
   // 拖拽结束
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
+    if (dragRef.current) {
+      const drag = dragRef.current
+      const pos = nodesPos[drag.id]
+      if (pos) {
+        // 保存位置到数据库
+        window.api.updateCharacter(drag.id, { graph_x: pos.x, graph_y: pos.y })
+      }
+      dragRef.current = null
+    }
     setDragging(null)
-  }
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+  }, [nodesPos])
 
   // 滚轮调整节点大小
   const handleWheel = (e, nd) => {
     e.preventDefault()
+    e.stopPropagation() // 阻止冒泡到画布，避免同时缩放
     const delta = e.deltaY > 0 ? -1 : 1
     setSizeOffsets((prev) => ({
       ...prev,
@@ -240,22 +279,79 @@ export default function RelationGraph({ novel, onOpenCharacter: _onOpenCharacter
     setPan({ x: 0, y: 0 })
   }, [])
 
+  const aiExtractRel = useCallback(async () => {
+    if (!data || data.chars.length < 2) return
+    setAiRelBusy(true)
+    try {
+      const newRelations = await window.api.aiExtractRelations(novel.id)
+      if (!newRelations.length) {
+        alert('AI 未发现新的人物关系')
+        setAiRelBusy(false)
+        return
+      }
+      // 获取已有关系，用于去重和合并
+      const existingRels = data.rels
+      const existingSet = new Set(existingRels.map(r => {
+        const aId = Math.min(r.char_a_id, r.char_b_id)
+        const bId = Math.max(r.char_a_id, r.char_b_id)
+        return `${aId}_${bId}`
+      }))
+      let created = 0
+      let updated = 0
+      for (const r of newRelations) {
+        const aId = Math.min(r.a_id, r.b_id)
+        const bId = Math.max(r.a_id, r.b_id)
+        const key = `${aId}_${bId}`
+        if (existingSet.has(key)) {
+          // 已存在，更新关系信息
+          const existing = existingRels.find(er => {
+            const ea = Math.min(er.char_a_id, er.char_b_id)
+            const eb = Math.max(er.char_a_id, er.char_b_id)
+            return ea === aId && eb === bId
+          })
+          if (existing) {
+            await window.api.updateRelation(existing.id, {
+              type: r.type || existing.type,
+              type_b: r.type_b || existing.type_b,
+              label: r.label || existing.label,
+              description: r.description || existing.description,
+            })
+            updated++
+          }
+        } else {
+          // 新关系，创建
+          try {
+            await window.api.createRelation(novel.id, {
+              char_a_id: r.a_id,
+              char_b_id: r.b_id,
+              type: r.type || '认识',
+              type_b: r.type_b || '',
+              label: r.label || '',
+              direction: r.direction || '双向',
+              description: r.description || '',
+            })
+            created++
+          } catch {
+            // 跳过无效关系
+          }
+        }
+      }
+      loadData()
+      alert(`已完成：新建 ${created} 条，更新 ${updated} 条关系`)
+    } catch (e) {
+      alert('AI 分析失败：' + e.message)
+    } finally {
+      setAiRelBusy(false)
+    }
+  }, [data, novel.id, loadData])
+
   if (!data) return <div className='loading'>关系网加载中...</div>
   if (data.chars.length === 0) {
     return (
       <div className='empty-state'>
         <div className='hint'>
           还没有人物。先在「人物列表」建立角色，再在这里查看人物关系网。
-          <br />
-          在人物编辑面板中可为角色建立关系。
         </div>
-      </div>
-    )
-  }
-  if (data.rels.length === 0) {
-    return (
-      <div className='empty-state'>
-        <div className='hint'>已有人物但还没有关系。在人物编辑面板中点击「+ 关系」建立人物之间的连线。</div>
       </div>
     )
   }
@@ -265,6 +361,24 @@ export default function RelationGraph({ novel, onOpenCharacter: _onOpenCharacter
   const linked = hover
     ? new Set([hover, ...layout.edges.filter((e) => e.a === hover || e.b === hover).flatMap((e) => [e.a, e.b])])
     : null
+
+  // 计算动态 viewBox，适应所有节点位置
+  const getViewBox = () => {
+    if (!layout || layout.nodes.length === 0) return `0 0 ${W} ${H}`
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const nd of layout.nodes) {
+      minX = Math.min(minX, nd.x)
+      minY = Math.min(minY, nd.y)
+      maxX = Math.max(maxX, nd.x)
+      maxY = Math.max(maxY, nd.y)
+    }
+    const padding = 100
+    const vbX = minX - padding
+    const vbY = minY - padding
+    const vbW = Math.max(W, maxX - minX + padding * 2)
+    const vbH = Math.max(H, maxY - minY + padding * 2)
+    return `${vbX} ${vbY} ${vbW} ${vbH}`
+  }
 
   const getNodeColor = (nd) => {
     const style = nodeStyles[nd.id]
@@ -295,6 +409,9 @@ export default function RelationGraph({ novel, onOpenCharacter: _onOpenCharacter
       <div className='row' style={{ padding: '4px 8px', gap: 12, flexWrap: 'wrap' }}>
         <span className='hint'>共 {data.chars.length} 个角色 · {data.rels.length} 条关系 · 拖拽移动节点，滚轮调整大小</span>
         <div className='grow' />
+        <button className='small' onClick={aiExtractRel} disabled={aiRelBusy || data.chars.length < 2}>
+          {aiRelBusy ? 'AI 分析中..' : 'AI 配置关系'}
+        </button>
         <button className='small' onClick={() => setScale(s => Math.min(3, s * 1.2))} title='放大'>+</button>
         <span className='hint' style={{ fontSize: 11, minWidth: 36, textAlign: 'center' }}>{Math.round(scale * 100)}%</span>
         <button className='small' onClick={() => setScale(s => Math.max(0.3, s * 0.8))} title='缩小'>-</button>
@@ -373,7 +490,7 @@ export default function RelationGraph({ novel, onOpenCharacter: _onOpenCharacter
       >
         <svg
           ref={svgRef}
-          viewBox={`0 0 ${W} ${H}`}
+          viewBox={getViewBox()}
           preserveAspectRatio='xMidYMid meet'
           style={{ width: '100%', height: '100%', cursor: dragging ? 'grabbing' : panning ? 'grabbing' : 'default', transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`, transformOrigin: 'center center' }}
           onMouseMove={handleMouseMove}

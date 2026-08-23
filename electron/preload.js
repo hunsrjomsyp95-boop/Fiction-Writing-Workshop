@@ -84,6 +84,8 @@ const names = {
   aiGenerateMapNodes: 'ai:generate-map-nodes',
   aiClassify: 'ai:classify',
   aiExtractEntities: 'ai:extract-entities',
+  aiMergeSettings: 'ai:merge-settings',
+  aiExtractRelations: 'ai:extract-relations',
   aiGetContext: 'ai:get-context',
   aiGetHistory: 'ai:get-history',
   aiAddHistory: 'ai:add-history',
@@ -211,4 +213,5 @@ contextBridge.exposeInMainWorld('updateListener', {
     ipcRenderer.on('update:event', handler)
     return () => ipcRenderer.removeListener('update:event', handler)
   },
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
 })

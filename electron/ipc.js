@@ -291,6 +291,8 @@ function registerAll(getWin) {
   handle('ai:generate-map', (text) => ai.aiGenerateMap(text))
   handle('ai:generate-map-nodes', (text) => ai.aiGenerateMapNodes(text))
   handle('ai:extract-entities', (text) => ai.aiExtractEntities(text))
+  handle('ai:merge-settings', (novelId) => ai.aiMergeSettings(novelId))
+  handle('ai:extract-relations', (novelId) => ai.aiExtractRelations(novelId))
   handle('ai:classify', (text, useAI) => (useAI ? ai.classifyMaterialAI(text) : ai.classifyLocal(text)))
 
   // AI 记忆管理

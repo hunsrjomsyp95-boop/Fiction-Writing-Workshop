@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Mountain, Building2, Home, Waves, TreePine, Plus, Link, Trash2, Save } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Mountain, Building2, Home, Waves, TreePine, Plus, Link, Trash2 } from 'lucide-react'
 import { useToast } from '../../ToastContext.jsx'
 import { useDialog } from '../../Dialog.jsx'
 
@@ -23,6 +23,7 @@ function forceLayout(nodes, edges) {
   const R = Math.min(W, H) / 2 - 70
   const n = nodes.length
   const pts = nodes.map((nd, i) => {
+    // 如果节点有保存的位置（非默认值），直接使用
     if (nd.x !== 0 || nd.y !== 0) return { ...nd }
     const a = (i / n) * Math.PI * 2
     return { ...nd, x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) }
@@ -75,12 +76,14 @@ export default function WorldMap({ novel }) {
   const [linkMode, setLinkMode] = useState(false)
   const [linkFrom, setLinkFrom] = useState(null)
   const [dragging, setDragging] = useState(null)
-  const [posOverrides, setPosOverrides] = useState({})
   const svgRef = useRef(null)
   const [scale, setScale] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [panning, setPanning] = useState(false)
   const panStartRef = useRef(null)
+  const [layoutNodes, setLayoutNodes] = useState([])
+  const dragRef = useRef(null) // 拖拽状态引用
+  const rafRef = useRef(null) // requestAnimationFrame 引用
 
   const loadViews = useCallback(async () => {
     let v = await window.api.listMapViews(novel.id, 'worldmap')
@@ -98,19 +101,17 @@ export default function WorldMap({ novel }) {
     const [n, e] = await Promise.all([window.api.listMapNodes(novel.id, currentViewId), window.api.listMapEdges(novel.id, currentViewId)])
     setNodes(n)
     setEdges(e)
+    // 计算布局
+    if (n.length > 0) {
+      const laid = forceLayout(n, e)
+      setLayoutNodes(laid)
+    } else {
+      setLayoutNodes([])
+    }
   }, [novel.id, currentViewId])
 
   useEffect(() => { loadViews() }, [loadViews])
   useEffect(() => { load() }, [load])
-
-  const layoutNodes = useMemo(() => {
-    if (nodes.length === 0) return []
-    const laid = forceLayout(nodes, edges)
-    laid.forEach(nd => {
-      if (posOverrides[nd.id]) { nd.x = posOverrides[nd.id].x; nd.y = posOverrides[nd.id].y }
-    })
-    return laid
-  }, [nodes, edges, posOverrides])
 
   const getSvgPoint = (e) => {
     const svg = svgRef.current
@@ -126,25 +127,53 @@ export default function WorldMap({ novel }) {
     e.stopPropagation()
     dragMoved.current = false
     const pt = getSvgPoint(e)
-    setDragging({ id: nd.id, startX: pt.x, startY: pt.y, nodeStartX: nd.x, nodeStartY: nd.y })
+    dragRef.current = { id: nd.id, startX: pt.x, startY: pt.y, nodeStartX: nd.x, nodeStartY: nd.y }
+    setDragging(dragRef.current)
   }
 
   const handleDragMove = useCallback((e) => {
-    if (!dragging) return
-    const pt = getSvgPoint(e)
-    const dx = pt.x - dragging.startX, dy = pt.y - dragging.startY
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMoved.current = true
-    if (dragMoved.current) {
-      setPosOverrides(p => ({ ...p, [dragging.id]: { x: dragging.nodeStartX + dx, y: dragging.nodeStartY + dy } }))
-    }
-  }, [dragging])
+    if (!dragRef.current) return
+    e.preventDefault()
+    
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    
+    rafRef.current = requestAnimationFrame(() => {
+      const drag = dragRef.current
+      if (!drag) return
+      
+      const pt = getSvgPoint(e)
+      const dx = pt.x - drag.startX, dy = pt.y - drag.startY
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMoved.current = true
+      
+      if (dragMoved.current) {
+        const newX = drag.nodeStartX + dx
+        const newY = drag.nodeStartY + dy
+        setLayoutNodes(prev => prev.map(nd => 
+          nd.id === drag.id ? { ...nd, x: newX, y: newY } : nd
+        ))
+      }
+    })
+  }, [])
 
   const handleDragEnd = useCallback(() => {
-    if (dragging && dragMoved.current && posOverrides[dragging.id]) {
-      window.api.updateMapNode(dragging.id, { x: posOverrides[dragging.id].x, y: posOverrides[dragging.id].y })
+    if (dragRef.current && dragMoved.current) {
+      const drag = dragRef.current
+      setLayoutNodes(prev => {
+        const nd = prev.find(n => n.id === drag.id)
+        if (nd) {
+          // 保存位置到数据库
+          window.api.updateMapNode(drag.id, { x: nd.x, y: nd.y })
+        }
+        return prev
+      })
     }
+    dragRef.current = null
     setDragging(null)
-  }, [dragging, posOverrides])
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+  }, [])
 
   const handleWheel = useCallback((e) => {
     e.preventDefault()
@@ -203,41 +232,91 @@ export default function WorldMap({ novel }) {
         window.api.listWorlds(novel.id),
         window.api.listItems(novel.id),
       ])
-      // 收集地点：只使用地理和关键地点
+      // 收集所有地理和地点相关设定，包含完整内容供AI分析
       const places = []
       for (const w of worlds) {
-        if (w.category === '地理') {
-          const icon = w.name.includes('山') ? 'mountain' : w.name.includes('河') || w.name.includes('海') ? 'waves' : w.name.includes('森林') || w.name.includes('树') ? 'tree' : w.name.includes('城') || w.name.includes('国') ? 'building' : 'building'
-          const color = w.name.includes('山') ? '#94a3b8' : w.name.includes('河') || w.name.includes('海') ? '#5ba3ff' : w.name.includes('森林') ? '#14b8a6' : w.name.includes('城') ? '#22c55e' : '#f59e0b'
-          places.push({ name: w.name, icon, color, note: (w.content || '').slice(0, 60) })
+        if (w.category === '地理' || w.category === '势力组织') {
+          places.push({ name: w.name, content: (w.content || '').slice(0, 500) })
         }
       }
       for (const it of items) {
         if (it.category === '关键地点') {
-          places.push({ name: it.name, icon: 'building', color: '#22c55e', note: it.description ? it.description.slice(0, 60) : '' })
+          places.push({ name: it.name, content: (it.description || '').slice(0, 500) })
         }
       }
       if (!places.length) {
         toast('没有地点数据，请先在「世界设定」添加地理条目，或在「物品」里添加关键地点', 'error')
         return
       }
+      // 去重
+      const unique = []
+      const seen = new Set()
+      for (const p of places) {
+        if (!seen.has(p.name)) {
+          seen.add(p.name)
+          unique.push(p)
+        }
+      }
+      // 调用 AI 为地点分配图标、颜色、描述和连线关系
+      const text = unique.map((p, i) => `${i + 1}. ${p.name}：${p.content}`).join('\n\n')
+      const result = await window.api.aiGenerateMapNodes(text)
       // 清除旧数据
       for (const e of edges) await window.api.deleteMapEdge(e.id)
       for (const n of nodes) await window.api.deleteMapNode(n.id)
-      // 创建新节点
+      // 使用 AI 返回的属性创建节点，位置由布局算法自动计算
+      const nodeList = result.nodes || unique.map(p => ({
+        name: p.name,
+        icon: 'building',
+        color: '#22c55e',
+        note: p.content.slice(0, 60),
+      }))
+      // 确保所有原始地点都被包含
+      const aiNames = new Set(nodeList.map(n => n.name))
+      for (const p of unique) {
+        if (!aiNames.has(p.name)) {
+          nodeList.push({
+            name: p.name,
+            icon: 'building',
+            color: '#22c55e',
+            note: p.content.slice(0, 60),
+          })
+        }
+      }
+      // 创建节点
       const nodeMap = {}
-      for (const p of places) {
-        const created = await window.api.createMapNode(novel.id, { ...p, view_id: currentViewId })
+      for (const p of nodeList) {
+        const created = await window.api.createMapNode(novel.id, {
+          name: p.name,
+          icon: p.icon || 'building',
+          color: p.color || '#22c55e',
+          note: p.note || '',
+          view_id: currentViewId,
+          x: 0,
+          y: 0,
+        })
         nodeMap[p.name] = created.id
       }
-      // 自动连线（相邻地点）
-      for (let i = 0; i < places.length - 1; i++) {
-        const fromId = nodeMap[places[i].name]
-        const toId = nodeMap[places[i + 1].name]
-        if (fromId && toId) await window.api.createMapEdge(novel.id, fromId, toId, '', currentViewId)
+      // 创建连线（使用 AI 返回的连线或默认顺序连线）
+      if (result.edges?.length) {
+        for (const e of result.edges) {
+          const fromId = nodeMap[e.from]
+          const toId = nodeMap[e.to]
+          if (fromId && toId) {
+            await window.api.createMapEdge(novel.id, fromId, toId, e.label || '', currentViewId)
+          }
+        }
+      } else {
+        // 默认顺序连线
+        for (let i = 0; i < nodeList.length - 1; i++) {
+          const fromId = nodeMap[nodeList[i].name]
+          const toId = nodeMap[nodeList[i + 1].name]
+          if (fromId && toId) {
+            await window.api.createMapEdge(novel.id, fromId, toId, '', currentViewId)
+          }
+        }
       }
       load()
-      toast(`已生成 ${places.length} 个地点`, 'success')
+      toast(`已生成 ${nodeList.length} 个地点`, 'success')
     } catch (e) {
       toast(`生成失败：${e.message}`, 'error', 5000)
     } finally {
@@ -266,6 +345,24 @@ export default function WorldMap({ novel }) {
   }
 
   const selected = layoutNodes.find(n => n.id === selectedNode)
+
+  // 计算动态 viewBox，适应所有节点位置
+  const getViewBox = () => {
+    if (layoutNodes.length === 0) return '0 0 1000 620'
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const nd of layoutNodes) {
+      minX = Math.min(minX, nd.x)
+      minY = Math.min(minY, nd.y)
+      maxX = Math.max(maxX, nd.x)
+      maxY = Math.max(maxY, nd.y)
+    }
+    const padding = 100
+    const vbX = minX - padding
+    const vbY = minY - padding
+    const vbW = Math.max(1000, maxX - minX + padding * 2)
+    const vbH = Math.max(620, maxY - minY + padding * 2)
+    return `${vbX} ${vbY} ${vbW} ${vbH}`
+  }
 
   const addView = async () => {
     const name = await prompt({ title: '视图名称', value: `地图 ${views.length + 1}` })
@@ -338,7 +435,7 @@ export default function WorldMap({ novel }) {
           {layoutNodes.length === 0 ? (
             <div className='empty-state'><div className='hint'>点击「添加地点」开始构建世界地图</div></div>
           ) : (
-            <svg ref={svgRef} viewBox='0 0 1000 620' width='100%' height='100%'
+            <svg ref={svgRef} viewBox={getViewBox()} width='100%' height='100%'
               style={{ cursor: linkMode ? 'crosshair' : panning ? 'grabbing' : 'default', transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`, transformOrigin: 'center center' }}
               onMouseMove={handleDragMove} onMouseUp={handleDragEnd} onMouseLeave={handleDragEnd}
               onClick={() => { setSelectedNode(null); setSelectedEdge(null) }}>

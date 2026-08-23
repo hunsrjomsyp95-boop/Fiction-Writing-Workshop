@@ -438,6 +438,8 @@ function migrate(d) {
   ensureCol('map_nodes', 'view_id', 'INTEGER DEFAULT 0')
   ensureCol('map_edges', 'view_id', 'INTEGER DEFAULT 0')
   ensureCol('relations', 'type_b', "TEXT DEFAULT ''")
+  ensureCol('characters', 'graph_x', 'REAL DEFAULT 0')
+  ensureCol('characters', 'graph_y', 'REAL DEFAULT 0')
   seedTypoDict(d)
   seedPrompts(d)
 }

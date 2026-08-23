@@ -31,7 +31,7 @@ function createCharacter(novelId, patch = {}) {
 }
 function updateCharacter(id, patch) {
   const d = use()
-  const cols = ['name', 'alias', 'role', 'gender', 'age', 'appearance', 'personality', 'background', 'relationships', 'notes', 'icon']
+  const cols = ['name', 'alias', 'role', 'gender', 'age', 'appearance', 'personality', 'background', 'relationships', 'notes', 'icon', 'graph_x', 'graph_y']
   const sets = []
   const vals = []
   for (const c of cols) {

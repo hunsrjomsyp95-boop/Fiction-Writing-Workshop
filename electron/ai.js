@@ -577,27 +577,39 @@ async function aiGenerateMapNodes(text) {
       [
         {
           role: 'system',
-          content: `你是一位奇幻世界地图设计师。根据给定的地点信息，生成地图节点和连线数据。
-只输出 JSON，不要任何说明文字。
+          content: `你是奇幻世界地图设计师。根据给定的地点信息，为每个地点分配图标、颜色、描述，并判断地点之间的连线关系。
+
+只输出 JSON，不要任何说明文字。不要用 markdown 代码块。
+
 格式：
-{
-  "nodes": [
-    {"name": "地点名", "icon": "mountain|building|home|waves|tree", "color": "#hex", "note": "简短描述"}
-  ],
-  "edges": [
-    {"from": "地点A", "to": "地点B", "label": "关系"}
-  ]
-}
-规则：
-- icon 选最匹配的：mountain=山/山脉 building=城市/国家 home=村庄/门派 waves=河流/海洋 tree=森林
-- color 用深色系：大陆#f59e0b 城市#22c55e 村庄#ec4899 河流#5ba3ff 森林#14b8a6 山脉#94a3b8
-- 边表示地理相邻或包含关系
-- 最多 15 个节点
-- 如果输入中没有明确的地点信息，根据内容推断可能的地点`,
+{"nodes":[{"name":"地点名","icon":"mountain|building|home|waves|tree","color":"#hex","note":"一句话描述"}],"edges":[{"from":"地点A","to":"地点B","label":"关系说明"}]}
+
+图标匹配规则（根据内容判断，不要只看名称）：
+- mountain：山脉、雪山、高峰、矿脉、峡谷、悬崖
+- building：城市、国家、皇宫、要塞、集市、门派总部、学院
+- home：村庄、小镇、营地、部落、渔村
+- waves：河流、湖泊、海洋、港口、瀑布、沼泽
+- tree：森林、树林、竹林、神木、花园
+
+颜色匹配规则（根据地点性质）：
+- 大陆/国家：#f59e0b（金色）
+- 城市/城镇：#22c55e（绿色）
+- 村庄/营地：#ec4899（粉色）
+- 河流/海洋：#5ba3ff（蓝色）
+- 森林/树林：#14b8a6（青色）
+- 山脉/雪山：#94a3b8（灰色）
+- 门派/学院：#a78bfa（紫色）
+- 战场/废墟：#ef4444（红色）
+
+edges 规则：
+- 表示地理相邻、有道路连接、或有从属关系的地点对
+- label 简短说明关系（如"官道"、"水路"、"包含"）
+
+nodes 必须包含输入的所有地点，不要遗漏任何一个。`,
         },
         { role: 'user', content: text.slice(0, 500000) },
       ],
-      { temperature: 0.4, maxTokens: 2000 }
+      { temperature: 0.3, maxTokens: 3000 }
     )
     const raw = res.content || ''
     let jsonStr = ''
@@ -606,29 +618,37 @@ async function aiGenerateMapNodes(text) {
     if (fenced) {
       jsonStr = fenced[1].trim()
     } else {
-      // 尝试匹配 JSON 对象（支持嵌套）
+      // 尝试匹配 JSON 对象
       const match = raw.match(/\{[\s\S]*\}/)
       jsonStr = match ? match[0] : ''
     }
     if (!jsonStr) {
-      throw new Error('AI 返回的内容无法解析为 JSON，请检查世界设定中是否有地理信息')
+      console.error('AI 返回内容无法解析:', raw.slice(0, 500))
+      return { nodes: [], edges: [] }
     }
     let json
     try {
       json = JSON.parse(jsonStr)
-    } catch (parseErr) {
-      throw new Error('JSON 解析失败，请检查世界设定中是否有地理信息')
+    } catch {
+      // 尝试清理常见的JSON格式问题
+      try {
+        const cleaned = jsonStr
+          .replace(/\/\/.*$/gm, '')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/,\s*([}\]])/g, '$1')
+        json = JSON.parse(cleaned)
+      } catch {
+        console.error('JSON 解析失败:', jsonStr.slice(0, 500))
+        return { nodes: [], edges: [] }
+      }
     }
-    if (!json.nodes?.length) {
-      throw new Error('AI 未返回有效的地点数据，请确保世界设定中有地理条目')
+    return {
+      nodes: Array.isArray(json.nodes) ? json.nodes : [],
+      edges: Array.isArray(json.edges) ? json.edges : [],
     }
-    return json
   } catch (e) {
-    const msg = e.message || '未知错误'
-    if (msg.includes('未配置') || msg.includes('API Key')) {
-      throw new Error('请先在「设置 → AI 设置」中配置 AI 服务商和 API Key')
-    }
-    throw new Error(`AI 生成失败：${msg}`)
+    console.error('AI 生成地图失败:', e.message)
+    return { nodes: [], edges: [] }
   }
 }
 
@@ -936,6 +956,179 @@ async function aiFilterContent(content, topic) {
   }
 }
 
+// AI 整理合并设定
+async function aiMergeSettings(novelId) {
+  const worlds = services.listWorlds(novelId)
+  const characters = services.listCharacters(novelId)
+  const foreshadowings = services.listForeshadowings(novelId)
+
+  const worldList = worlds.map((w) => ({
+    id: w.id,
+    name: w.name,
+    category: w.category,
+    content: (w.content || '').slice(0, 500),
+  }))
+
+  const charList = characters.map((c) => ({
+    id: c.id,
+    name: c.name,
+    role: c.role,
+    gender: c.gender,
+    age: c.age,
+    appearance: (c.appearance || '').slice(0, 200),
+    personality: (c.personality || '').slice(0, 200),
+    background: (c.background || '').slice(0, 300),
+  }))
+
+  const fshList = foreshadowings.map((f) => ({
+    id: f.id,
+    title: f.title,
+    type: f.type,
+    status: f.status,
+    setup_desc: (f.setup_desc || '').slice(0, 300),
+    call_desc: (f.call_desc || '').slice(0, 200),
+    resolve_desc: (f.resolve_desc || '').slice(0, 200),
+  }))
+
+  const prompt = `你是设定整理专家。请分析以下三类设定数据，找出每类内部的重复或高度相似的条目，给出合并建议。
+
+判断重复的依据：
+- 世界观：名称相似（如"灵力体系"vs"灵力系统"）、内容描述同一概念
+- 人物：名字相同或极度相似（如"张三"vs"张三丰"明显不同，但"李明"vs"李明"相同）
+- 伏笔：标题相似、描述同一事件
+
+对于每组重复，指定：
+- keep_id：保留哪条（选内容更完整的）
+- merge_ids：要合并的其他条目ID列表
+- merged_content/merged_fields：合并后的完整内容（整合去重，保留所有有价值信息）
+- reason：合并原因
+
+只返回 JSON，不要其他文字。
+格式：
+{
+  "world_groups": [{"keep_id":1,"keep_name":"名称","merge_ids":[2,3],"merged_content":"合并后内容","reason":"原因"}],
+  "character_groups": [{"keep_id":1,"keep_name":"名字","merge_ids":[2],"merged_fields":{"appearance":"合并后","personality":"合并后","background":"合并后","relationships":"合并后","notes":"合并后"},"reason":"原因"}],
+  "foreshadow_groups": [{"keep_id":1,"keep_name":"标题","merge_ids":[2],"merged_fields":{"setup_desc":"合并后","call_desc":"合并后","resolve_desc":"合并后"},"reason":"原因"}]
+}
+
+如果没有重复，返回空数组：{"world_groups":[],"character_groups":[],"foreshadow_groups":[]}
+
+---
+【世界观设定】
+${JSON.stringify(worldList, null, 2)}
+
+---
+【人物档案】
+${JSON.stringify(charList, null, 2)}
+
+---
+【伏笔】
+${JSON.stringify(fshList, null, 2)}`
+
+  const res = await chat(
+    [
+      { role: 'system', content: '你是设定整理专家，只返回 JSON。' },
+      { role: 'user', content: prompt },
+    ],
+    { temperature: 0.1, maxTokens: 8192, timeout: 300 }
+  )
+
+  try {
+    const cleaned = res.content
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim()
+    const parsed = JSON.parse(cleaned)
+    return {
+      world_groups: Array.isArray(parsed.world_groups) ? parsed.world_groups : [],
+      character_groups: Array.isArray(parsed.character_groups) ? parsed.character_groups : [],
+      foreshadow_groups: Array.isArray(parsed.foreshadow_groups) ? parsed.foreshadow_groups : [],
+    }
+  } catch {
+    return { world_groups: [], character_groups: [], foreshadow_groups: [] }
+  }
+}
+
+// AI 提取人物关系
+async function aiExtractRelations(novelId) {
+  const characters = services.listCharacters(novelId)
+  if (characters.length < 2) return []
+
+  const charList = characters.map((c) => ({
+    id: c.id,
+    name: c.name,
+    alias: c.alias || '',
+    role: c.role || '',
+    gender: c.gender || '',
+    age: c.age || '',
+    personality: (c.personality || '').slice(0, 150),
+    background: (c.background || '').slice(0, 200),
+    relationships: (c.relationships || '').slice(0, 200),
+  }))
+
+  const prompt = `你是小说关系分析师。根据以下人物档案，分析人物之间的具体关系。
+
+只输出 JSON，不要任何说明文字。不要用 markdown 代码块。
+
+格式：
+{"relations":[{"a_id":1,"b_id":2,"type":"具体关系","type_b":"反向关系","label":"简短标签","direction":"双向|单向","description":"关系说明"}]}
+
+重要规则：
+1. 必须使用具体关系，禁止使用笼统的"家人"、"亲属"等词
+2. 根据性别和年龄判断具体关系：
+   - 父子/父女：type="父亲"，type_b="儿子/女儿"
+   - 母子/母女：type="母亲"，type_b="儿子/女儿"
+   - 兄弟：type="哥哥/弟弟"，type_b="弟弟/哥哥"
+   - 姐妹：type="姐姐/妹妹"，type_b="妹妹/姐姐"
+   - 兄妹/姐弟：type="哥哥/姐姐"，type_b="妹妹/弟弟"
+   - 夫妻：type="丈夫"，type_b="妻子"
+   - 恋人：type="男友/女友"，type_b="女友/男友"
+   - 师徒：type="师父"，type_b="徒弟"
+   - 上下级：type="上司/主人"，type_b="下属/仆人"
+
+3. direction 判断：
+   - 双向：朋友、恋人、夫妻、宿敌、同盟、对手
+   - 单向：父子、母女、师徒、暗恋、保护、利用
+
+4. label 用2-4字概括关系本质（如：血浓于水/亦师亦友/相爱相杀）
+
+---
+【人物档案】
+${JSON.stringify(charList, null, 2)}`
+
+  const res = await chat(
+    [
+      { role: 'system', content: '你是小说关系分析师，只输出 JSON。必须使用具体关系类型，禁止用笼统词汇。' },
+      { role: 'user', content: prompt },
+    ],
+    { temperature: 0.2, maxTokens: 4096, timeout: 180 }
+  )
+
+  try {
+    const cleaned = res.content
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim()
+    const parsed = JSON.parse(cleaned)
+    const relations = Array.isArray(parsed.relations) ? parsed.relations : []
+    // 去重：同两个人物之间只保留一个关系
+    const seen = new Set()
+    const unique = []
+    for (const r of relations) {
+      const aId = Math.min(r.a_id, r.b_id)
+      const bId = Math.max(r.a_id, r.b_id)
+      const key = `${aId}_${bId}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        unique.push(r)
+      }
+    }
+    return unique
+  } catch {
+    return []
+  }
+}
+
 module.exports = {
   getConfig,
   saveConfig,
@@ -958,6 +1151,8 @@ module.exports = {
   aiGenerateMapNodes,
   aiExtractEntities,
   aiFilterContent,
+  aiMergeSettings,
+  aiExtractRelations,
   getCachedProjectContext,
   getConversationHistory,
   addToConversationHistory,

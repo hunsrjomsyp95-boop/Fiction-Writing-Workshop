@@ -1,6 +1,7 @@
 appId: com.novelstudio.writer
 productName: 小说创作工坊
 copyright: Copyright © 2026
+artifactName: 'novel-studio-setup-${version}.${ext}'
 
 publish:
   provider: github

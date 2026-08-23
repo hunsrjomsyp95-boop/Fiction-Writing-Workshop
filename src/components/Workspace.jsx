@@ -120,6 +120,9 @@ export default function Workspace({ novel, user, onExit, onLock }) {
       if (data.status === 'error') {
         toast('更新失败：' + (data.message || '未知错误'), 'error')
       }
+      if (data.status === 'downloaded') {
+        toast('更新已下载完成，将自动安装', 'success')
+      }
     })
   }, [])
   useShortcutRun('tab_extract', () => setTab('extract'))
@@ -164,6 +167,22 @@ export default function Workspace({ novel, user, onExit, onLock }) {
     toast('已修改成功', 'success')
   }
 
+  const handleCheckUpdate = async () => {
+    if (!window.updateListener?.checkForUpdates) {
+      toast('检查更新功能不可用', 'error')
+      return
+    }
+    try {
+      toast('正在检查更新...', 'info')
+      const result = await window.updateListener.checkForUpdates()
+      if (!result.hasUpdate) {
+        toast('已是最新版本', 'success')
+      }
+    } catch (err) {
+      toast('检查更新失败: ' + err.message, 'error')
+    }
+  }
+
   const jumpToChapter = (chapterId) => {
     setTab('chapters')
     window.dispatchEvent(new CustomEvent('jump-chapter', { detail: { chapterId } }))
@@ -190,6 +209,19 @@ export default function Workspace({ novel, user, onExit, onLock }) {
           <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.3)', borderRadius: 2 }}>
             <div style={{ width: `${updateStatus.progress}%`, height: '100%', background: '#fff', borderRadius: 2, transition: 'width 0.3s' }} />
           </div>
+        </div>
+      )}
+      {updateStatus && updateStatus.status === 'downloaded' && (
+        <div style={{
+          background: '#22c55e',
+          color: '#fff',
+          padding: '4px 16px',
+          fontSize: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          更新已下载完成，重启后自动安装
         </div>
       )}
       <header className='topbar' role='banner'>
@@ -250,6 +282,9 @@ export default function Workspace({ novel, user, onExit, onLock }) {
           </button>
           <button className='ghost' title='帮助' onClick={() => setHelpOpen(true)} aria-label='帮助'>
             <HelpCircle size={18} />
+          </button>
+          <button className='ghost' title='检查更新' onClick={handleCheckUpdate} aria-label='检查更新'>
+            <RotateCw size={18} />
           </button>
           <button className='ghost' onClick={onExit} title='返回首页' aria-label='返回首页'>
             <Home size={18} />
